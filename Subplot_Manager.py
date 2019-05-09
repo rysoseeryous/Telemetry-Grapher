@@ -94,7 +94,7 @@ class Subplot_Manager():
                         color_index += 1
                         style = None
                         par.yaxis.label.set_color('k')
-                    line, = par.plot(TG.data[name][series], color=color, linestyle=style,
+                    line, = par.plot(TG.groups[name].data[series], color=color, linestyle=style,
                                      marker='o', markersize=TG.dotsize, fillstyle='full', markeredgewidth=TG.dotsize, linewidth=0.75)
                     lines.append(line)
                     try:

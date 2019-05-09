@@ -4,6 +4,7 @@ Created on Mon May  6 14:59:10 2019
 
 @author: seery
 """
+from PyQt5.QtWidgets import *
 
 class Control_Frame(QWidget):
     """Contains all buttons for controlling the organization of subplots and saving the figure."""
@@ -117,6 +118,7 @@ class Control_Frame(QWidget):
             TG.statusBar().showMessage('Select one subplot to reorder')
 
     def insert_subplot(self, sps):
+        ### Currently breaks everything
         """Inserts subplot at top of figure. (Indexed insertion not working)"""
         TG = self.parent
         AF = TG.axes_frame
@@ -143,9 +145,9 @@ class Control_Frame(QWidget):
 
         AF.subplots.insert(index+1, Subplot_Manager(TG, ax, index=index+1))  # AF.subplots kept in displayed order
         for i,sp in enumerate(AF.subplots): sp.index = i
-        for sp in AF.subplots:
-            print(sp.index, sp)
-        print('')
+#        for sp in AF.subplots:
+#            print(sp.index, sp)
+#        print('')
         self.cleanup_axes()
         self.weightsEdit.setText(str(AF.weights))
         AF.draw()
@@ -181,15 +183,15 @@ class Control_Frame(QWidget):
         """Adds selected subplot's contents back into available tree, clears axis."""
         TG = self.parent
         if sps:
+            AF = TG.axes_frame
             SF = TG.series_frame
-            target_tree = SF.available
             SF.plotted.clear()
             for sp in sps:
-                SF.populate_tree(sp.contents, target_tree)
-                AF.available_data = SF.add_to
+                AF.available_data = SF.add_to_contents(AF.available_data, sp.contents)
+                SF.populate_tree(AF.available_data, SF.available)
+                SF.search(SF.searchAvailable, SF.available, AF.available_data)
                 sp.contents = {}
                 sp.order = [None]
-
                 sp.refresh()
             if len(sps) > 1: TG.statusBar().showMessage('Cleared subplots: {}'.format(sorted([sp.index for sp in sps])))
             else: TG.statusBar().showMessage('Cleared subplot: {}'.format(sps[0].index))
@@ -293,17 +295,17 @@ class Control_Frame(QWidget):
     def save_figure(self):
         """Saves figure to displayed directory. If no path or extension is given, defaults are current directory and .jpg."""
 #         Hijacking this function to test twinx() error
-        TG = self.parent
-        AF = TG.axes_frame
-        sp = AF.current_sps[0]
-        sp.host().plot([1,2,3,4])
-        AF.draw()
-
 #        TG = self.parent
 #        AF = TG.axes_frame
-#        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
+#        sp = AF.current_sps[0]
+#        sp.host().plot([1,2,3,4])
 #        AF.draw()
-#        plt.savefig(self.pathEdit.text(), dpi=300, format='jpg', transparent=True, bbox_inches='tight')
-#        TG.statusBar().showMessage('Saved to {}'.format(self.pathEdit.text()))
+
+        TG = self.parent
+        AF = TG.axes_frame
+        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
+        AF.draw()
+        plt.savefig(self.pathEdit.text(), dpi=300, format='jpg', transparent=True, bbox_inches='tight')
+        TG.statusBar().showMessage('Saved to {}'.format(self.pathEdit.text()))
 
 

@@ -4,6 +4,7 @@ Created on Mon May  6 14:58:42 2019
 
 @author: seery
 """
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class Axes_Frame(FigureCanvas):
     """Container for figure with subplots. New Axes_Frame objects are created and when a new Figure tab is created (TBI)."""
@@ -14,10 +15,9 @@ class Axes_Frame(FigureCanvas):
         self.weights = [1]
         gs = gridspec.GridSpec(1, 1, height_ratios=self.weights)
         ax0 = self.fig.add_subplot(gs[0])
-        self.subplots = [Subplot_Manager(parent, ax0, index=0)]
+        self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
         self.current_sps = []
-        self.available_data = parent.data_dict  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
-        self.plotted_data = {}
+        self.available_data = copy.deepcopy(parent.data_dict)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
         self.fig.suptitle(parent.control_frame.titleEdit.text(), fontsize=20)
         mpl.rc('font', family='serif')
@@ -106,6 +106,7 @@ class Axes_Frame(FigureCanvas):
         if len(self.current_sps) == 1:
             sp = self.current_sps[0]
             SF.populate_tree(sp.contents, SF.plotted)
+            SF.search(SF.searchPlotted, SF.plotted, sp.contents)
             CF.legendToggle.setCheckable(True)
             CF.legendToggle.setChecked(sp.legend)
             CF.colorCoord.setCheckable(True)

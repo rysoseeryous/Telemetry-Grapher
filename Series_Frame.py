@@ -4,6 +4,7 @@ Created on Mon May  6 14:57:32 2019
 
 @author: seery
 """
+from PyQt5.QtWidgets import *
 
 class Series_Frame(QWidget):
     """Manages imported data. Shows hierarchically the series (with assigned units) available to plot and the series plotted in the selected subplot(s)."""
@@ -29,10 +30,10 @@ class Series_Frame(QWidget):
         self.remove.clicked.connect(lambda: self.transfer('Remove'))
         self.searchAvailable = QLineEdit()
         self.searchAvailable.setPlaceholderText('Search')
-#        self.searchAvailable.textChanged.connect(lambda: self.search(self.searchAvailable, self.available, self.parent.axes_frame.available_data))
+        self.searchAvailable.textChanged.connect(lambda: self.search(self.searchAvailable, self.available, self.parent.axes_frame.available_data))
         self.searchPlotted = QLineEdit()
         self.searchPlotted.setPlaceholderText('Search')
-#        self.searchPlotted.textChanged.connect(lambda: self.search(self.searchPlotted, self.plotted, self.get_sp_contents()))
+        self.searchPlotted.textChanged.connect(lambda: self.search(self.searchPlotted, self.plotted, self.get_sp_contents()))
 
         grid.addWidget(self.searchAvailable, 0, 0)
         grid.addWidget(self.searchPlotted, 0, 1)
@@ -42,7 +43,7 @@ class Series_Frame(QWidget):
         grid.addWidget(self.remove, 2, 1)
         self.setLayout(grid)
 
-        self.populate_tree(parent.data_dict, self.available)
+        self.populate_tree(parent.axes_frame.available_data, self.available)
         self.available.expandAll()
         self.available.resizeColumnToContents(0)
 
@@ -59,22 +60,19 @@ class Series_Frame(QWidget):
             for x in to_delete:
                 tree.takeTopLevelItem(x)
 
-    def read_tree(self, tree):
-        """Reads tree into standard contents format {name: {series:units}}."""
-        level0s = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
-        if level0s:
-            names = [n.text(0) for n in level0s]
-            series = [[level0.child(i).text(0) for i in range(level0.childCount())] for level0 in level0s]
-            units = [[level0.child(i).text(1) for i in range(level0.childCount())] for level0 in level0s]
-            contents = {}
-            for n,s,u in zip(names, series, units):
-                contents[n] = dict(zip(s,u))
-        else:
-            contents = {}
-        return contents
-
-
-
+#    def read_tree(self, tree):
+#        """Reads tree into standard contents format {name: {series:units}}."""
+#        level0s = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+#        if level0s:
+#            names = [n.text(0) for n in level0s]
+#            series = [[level0.child(i).text(0) for i in range(level0.childCount())] for level0 in level0s]
+#            units = [[level0.child(i).text(1) for i in range(level0.childCount())] for level0 in level0s]
+#            contents = {}
+#            for n,s,u in zip(names, series, units):
+#                contents[n] = dict(zip(s,u))
+#        else:
+#            contents = {}
+#        return contents
 
     def add_to_contents(self, contents, to_add):
         for name, series_units in to_add.items():
@@ -95,8 +93,6 @@ class Series_Frame(QWidget):
         return contents
 
     def populate_tree(self, contents, target_tree):
-
-
         """Clears target_tree and repopulates with contents"""
         # populate tree with contents
         target_tree.clear()
@@ -133,18 +129,16 @@ class Series_Frame(QWidget):
 #            self.cleanup()
 
     def update_subplot_contents(self, sp, contents):
-        """Reads plotted tree into selected subplots' contents."""
-#        if sp is not None:
-#            contents = self.read_tree(self.plotted)
-#        if contents:
+        """Updates selected subplots' contents and order."""
         all_units = []
         for series_units in contents.values():
             all_units.extend(series_units.values())
         sp.order = [u for u in sp.order if u in all_units]
         if not sp.order: sp.order = [None]
-#        else:
-#            contents = {}
-        sp.contents = contents
+        sp.contents = copy.deepcopy(contents)
+        # Deep copy seems like it should be unnecessary but it prevents sp.contents from being carried over between instances.
+        # Can probably remove at full rollout. See also deep copies of data and data_dict in Figure Window __init__()
+        # Probably takes a lot of memory
 
     def transfer(self, caller):
         """Swaps series or entire dataframe references from available to plotted or vice versa."""
@@ -159,19 +153,16 @@ class Series_Frame(QWidget):
             sp = selected_sps[0]
             if caller == 'Add':
                 sourceTree = self.available
-#                targetTree = self.plotted
                 availableFunc = self.remove_from_contents
                 plottedFunc = self.add_to_contents
             if caller == 'Remove':
                 sourceTree = self.plotted
-#                targetTree = self.available
                 availableFunc = self.add_to_contents
                 plottedFunc = self.remove_from_contents
 
             selected = sourceTree.selectedItems()
             if selected:
-
-                # Read contents from selected items (WORKING JUST FINE)
+                # Read contents from selected items
                 contents = {}
                 if all(item.parent() is None for item in selected):  # if only level0 items in selection
                     for item in selected:
@@ -191,64 +182,43 @@ class Series_Frame(QWidget):
                             series = child.text(0)
                             units = child.text(1)
                             contents = self.add_to_contents(contents,{name: {series:units}})
-
-
-                # Transfer contents to/from available_data
-
-
-                self.update_subplot_contents(sp, plottedFunc(sp.contents, contents))  # add contents to subplot
+                # Add/remove contents from sp
+                self.update_subplot_contents(sp, plottedFunc(sp.contents, contents))
+                # Refresh sp
                 sp.refresh()
-
+                # Transfer contents to/from available_data
                 AF.available_data = availableFunc(AF.available_data, contents)
+                # Populate both trees with un-search-filtered data
                 self.populate_tree(AF.available_data, self.available)
                 self.populate_tree(sp.contents, self.plotted)
                 self.cleanup()
-#                # Transfer contents to/from selected contents from available_data
-#                if caller == 'Add':
-##                    self.parent.axes_frame.available_data = self.remove_from_contents(self.parent.axes_frame.available_data, contents)
-#
-#                if caller == 'Remove':
-##                    self.parent.axes_frame.available_data = self.add_to_contents(self.parent.axes_frame.available_data, contents)
-#                    AF.available_data = self.add_to_contents(AF.available_data, contents)
-
-                # Populate available tree with available_data and plotted tree with sp.contents
-#                self.available.clear()
-#                self.populate_tree(AF.available_data, self.available)
-#                self.populate_tree(contents, self.plotted)
-
-                # Update sp.contents with contents and refresh
-
-                # Apply search mask to both trees TBI
-#                self.search(self.searchAvailable, self.available, AF.available_data)
-#                self.search(self.searchPlotted, self.plotted, sp.contents)
-                  # takes care of any empty level0 references
-
-                sp.refresh()
+                # Reapply search filters
+                self.search(self.searchAvailable, self.available, AF.available_data)
+                self.search(self.searchPlotted, self.plotted, sp.contents)
             else:
                 TG.statusBar().showMessage('No series selected')
 
-#    def get_sp_contents(self):
-#        TG = self.parent
-#        AF = TG.axes_frame
-#        if len(AF.current_sps) == 1:
-#            contents = AF.current_sps[0].contents
-#        else:
-#            contents = {}
-#        return contents
-#
-#    def search(self, search_bar, tree, data_set):
-#        """Displays only series in tree which match input to search_bar (case insensitive)"""
-#        user_input = re.compile(search_bar.text(), re.IGNORECASE)
-#        matches = {}
-#        print(data_set)
-#        if data_set:
-#            for name, series_units in data_set.items():
-#                for series, units in series_units.items():
-#                    if user_input.search(series):
-#                        matches = self.add_to_contents(matches, {name: {series:units}})
-#            self.populate_tree(matches, tree)
+    def get_sp_contents(self):
+        TG = self.parent
+        AF = TG.axes_frame
+        if len(AF.current_sps) == 1:
+            contents = AF.current_sps[0].contents
+        else:
+            contents = {}
+        return contents
+
+    def search(self, search_bar, tree, data_set):
+        """Displays only series in tree which match input to search_bar (case insensitive)"""
+        user_input = re.compile(search_bar.text(), re.IGNORECASE)
+        matches = {}
+        if data_set:
+            for name, series_units in data_set.items():
+                for series, units in series_units.items():
+                    if user_input.search(series):
+                        matches = self.add_to_contents(matches, {name: {series:units}})
+            self.populate_tree(matches, tree)
 #            self.cleanup()
-#
+
 #        level0s = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
 #        if level0s:
 #            names = [n.text(0) for n in level0s]
@@ -260,6 +230,3 @@ class Series_Frame(QWidget):
 #            tree.clear()
 #            self.populate_tree(contents, tree)
 #            self.cleanup()
-        #  THIS WORKS. BUT. I need to be able to save what was there before in a class attribute
-        #  That attribute also needs to be affected by transferring series into the plotted tree.
-        #  ^ this edit will occur in update_subplot_contents
