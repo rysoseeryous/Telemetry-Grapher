@@ -13,6 +13,7 @@ class Import_Tab(QWidget):
         self.grid = QGridLayout()
         self.path_dict = {}
         self.dir = os.getcwd()
+        self.auto_parse = True
 #        self.dir = r'C:\Users\seery\Documents\German (the person)\PHI_data_housekeeping\CSV'  # delete later, just for quicker access
 
 #        dirLabel = QLabel('Directory:')
@@ -152,6 +153,7 @@ class Import_Tab(QWidget):
 
     def edit_source_files(self):
         """Shows source files of selected group but doesn't un-import. Click "Import Group" and overwrite to save edits."""
+        DM = self.parent
         try:
             item = self.importedGroups.selectedItems()[0]
             if self.groupFiles.count():
@@ -183,37 +185,33 @@ class Import_Tab(QWidget):
                 return np.nan
 
         def parse_unit(header):
-            regex = re.compile('\[([a-z]|[A-Z])*\]')  # returns match if something like [letters] anywhere in header
+            regex = re.compile('\[([a-z]|[A-Z])*\]')  # returns match if something like [letters] anywhere in header ### SHOULD RETURN LAST INSTANCE IF MULTIPLE MATCHES
             parsed = re.search(regex, header)
             if parsed:
                 parsed = parsed.group(0)[1:-1]  # return parsed unit without the brackets
                 if parsed in DM.parent.unit_clarify:
                     parsed = DM.parent.unit_clarify[parsed]
-                if (DM.parent.get_unit_type(parsed) is not None):
+                if DM.parent.get_unit_type(parsed) is not None:
                     return parsed
             return None
             # feedback to message log: 'Unable to parse unit from header \"{}\" in file \"{}\". See Unit Settings in Configure tab.
             # pop up saying:
             # 'Unit could not be parsed from header \"{}\". You can assign one yourself here, or click cancel to leave it blank. See Unit Settings in Configure tab to append unit database'.format(header)
             # combo box for unit type, label updates with default unit.
+            # You can turn off this setting in Import Settings, but then you have to assign all the units manually
 
         def combine_files(pathlist):
             dflist = []
-            series_units = {}
-            parse_error_log = {}
             for file in pathlist:
                 data = pd.read_excel(file, index_col=0)
                 data.index.names = ['Timestamp']
-                units = []
-                for header in data.columns:
-                    parsed = parse_unit(header)
-                    units.append(parsed)
-                    if parsed is None:
-                        if file in parse_error_log:
-                            parse_error_log[file].append(header)
-                        else:
-                            parse_error_log[file] = [header]
-                series_units.update(dict(zip(data.columns, units)))
+                # if dataframe headers are not unique, MAKE them unique
+#                for i, header in enumerate(data.columns):
+
+
+
+
+
                 dflist.append(data)
             df = pd.concat(dflist, axis=0, sort=False)
             try:
@@ -222,7 +220,7 @@ class Import_Tab(QWidget):
             except ValueError:
                 print('\\nERROR: datetime formatting does not correspond to the data format\\n')
                 raise
-            return df, series_units, parse_error_log
+            return df
 ### CURRENTLY FUNCTIONAL ONLY FOR PHI_HK DATA
 #        def combine_files(pathlist, skiprows=None, header_row=0, ts_col=None, dtf=None):
 #            """Returns dataframe of concatenated data from all files in filelist using ts_col as the index, renamed 'Timestamp'."""
@@ -261,16 +259,16 @@ class Import_Tab(QWidget):
         ### Beginning of actions
         DM = self.parent
 
-        name = self.groupName.text()
+        group = self.groupName.text()
         loaded_groups = [self.importedGroups.item(i).text() for i in range(self.importedGroups.count())]
 
         # Use case filtering
-        if name == '':
+        if group == '':
             DM.feedback('Group name cannot be empty.')
             return
-        elif name in loaded_groups:
-            if DM.popup('Group \"{}\" already exists. Overwrite?'.format(name)) == QMessageBox.Ok:
-                self.importedGroups.takeItem(loaded_groups.index(name))
+        elif group in loaded_groups:
+            if DM.popup('Group \"{}\" already exists. Overwrite?'.format(group)) == QMessageBox.Ok:
+                self.importedGroups.takeItem(loaded_groups.index(group))
             else:
                 return
         source_files = [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]  #read groupfiles listview
@@ -278,33 +276,34 @@ class Import_Tab(QWidget):
             DM.feedback('Group cannot have 0 associated files.')
             return
         source_paths = [self.path_dict[file] for file in source_files]  #path_dict is quasi global, appended gather_files (therefore, navigating to a different directory should not disconnect files from paths)
-        df, series_units, parse_error_log = combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
+        df = combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
         # need some error handling here, and subsequent encouragement to check import preferences
-        DM.groups[name] = Group(df, df.columns, source_files, source_paths)  # this is writing to Data_Manager's version, not TG's
-        # data_dict assignment
-        # Later this should try to parse units from df.columns/group.og_headers
-        # if unknown unit found, do the following:
-        # You can turn off this setting in Import Settings, but then you have to assign all the units manually
-#        units = ['T']*len(df.columns)  # assign all series to Temperature for now
-        DM.data_dict[name] = series_units  # this is writing to Data_Manager's version, not TG's
+        DM.groups[group] = Group(df, source_files, source_paths)  # this is writing to Data_Manager's version, not TG's
 
-        # future error handling goes here and looks maybe a little like this
+        # Try to auto parse units
+        if self.auto_parse:
+            parse_error_log = []
+            for header in DM.groups[group].series:
+                parsed = parse_unit(header)
+                DM.groups[group].series[header].unit = parsed
+                if parsed is None:
+                    parse_error_log.append(header)  # parse_error_log formerly associated headers with their source files, but this has been removed because you can just look at the data in the DataFrames tab to figure out what the unit should be in the event of parse failure
 
-        self.importedGroups.addItem(name)
+        # future error handling goes here
+
+        self.importedGroups.addItem(group)
 
         # Update other tabs
-        DM.configure_tab.selectGroup.addItem(name)
-        DM.dataframes_tab.selectGroup.addItem(name)
+        DM.configure_tab.selectGroup.addItem(group)
+        DM.dataframes_tab.selectGroup.addItem(group)
 
         self.groupFiles.clear()
         self.groupName.setText('')
         DM.modified = True
         if parse_error_log:
             report = ''
-            for file in parse_error_log:
-                report += file[file.rindex('\\')+1:]+'\n'
-                for header in parse_error_log[file]:
-                    report += '\t'+header+'\n'
+            for header in parse_error_log:
+                report += header+'\n'
             DM.popup('Unit Parse Failure',
                               informative='''Unable to parse units from the following source files and headers. See Configure tab to manually assign units.''',
                               details=report,

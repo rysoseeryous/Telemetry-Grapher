@@ -14,7 +14,6 @@ class Data_Manager(QDialog):
         self.setWindowIcon(QIcon('satellite.png'))
 
         self.groups = copy.deepcopy(parent.groups)  # copy so that if you can still discard changes
-        self.data_dict = copy.deepcopy(parent.data_dict)
         self.modified = False
 
         self.resize(1000,500)
@@ -90,16 +89,77 @@ class Data_Manager(QDialog):
 
     def save_changes(self):
         if self.modified:
-            self.parent.groups = self.groups
-            self.parent.data_dict = self.data_dict
-            self.modified = False
-        # should these be copies?
-        # should I clear the manager's groups/data_dict after saving? IN THIS CASE THEY WOULD NEED TO BE COPIES!!
+#            for group in self.groups:
+#                for header in self.groups[group].series:
+#                    print(header, ': ', self.groups[group].series[header].alias)
+#                    print(header, ': ', self.groups[group].series[header].alias)
+#                    print(header, ': ', self.groups[group].series[header].alias)
             SF = self.parent.series_frame
             ### Eventually, loop this through all open axes frames (excel tab implementation)
             AF = self.parent.axes_frame
-            AF.available_data = SF.add_to_contents(AF.available_data, self.data_dict)
+
+            # Get new alias/unit information from self.groups
+            new_contents = {}
+            for group in self.groups:
+                aliases = []
+                units = []
+                for header in self.groups[group].series.keys():
+                    if self.groups[group].series[header].keep:
+                        alias = self.groups[group].series[header].alias
+                        if alias:
+                            aliases.append(alias)
+                        else:
+                            aliases.append(header)
+                        units.append(self.groups[group].series[header].unit)
+                new_contents.update({group: dict(zip(aliases, units))})
+
+            # Look up headers from aliases in self.parent.groups
+            # Map those headers to their new aliases and units
+                # Do this through AF.available_data and AF.subplots
+#            print('new_contents:',new_contents,'\n')
+
+            for sp in AF.subplots:
+                content_groups = copy.deepcopy(tuple(sp.contents.keys()))
+                for group in content_groups:
+                    # delete top-level groups in subplot if group was deleted.
+                    #THIS MEANS that if you edited the source files, and reimported with a different name and the same data, the data will be removed from the figure
+#                    print('group: ',group)
+                    if group not in new_contents:
+                        del sp.contents[group]
+                    else:
+                        aliases = copy.deepcopy(tuple(sp.contents[group].keys()))  # define loop elements first so it doesn't change size during iteration
+#                        print('aliases: ', aliases)
+                        for alias in aliases:
+#                            print('\ncurrent alias_dict: ',self.parent.groups[group].alias_dict)
+                            try:
+                                header = self.parent.groups[group].alias_dict[alias]  # get original header of each alias in sp.contents
+                            except KeyError:  # if original header being used as alias (because no alias was assigned)
+                                header = alias
+#                            print('alias: header  ->  ', alias,': ',header)
+                            del sp.contents[group][alias]  # scrap old alias entry
+#                            print('sp.contents after del: ', sp.contents)
+#                            print('new series: ',self.groups[group].series)
+                            if header in self.groups[group].series:  # if original header regonized in new groups dictionary
+                                new_alias = self.groups[group].series[header].alias
+                                if new_alias is None: new_alias = header
+                                if self.groups[group].series[new_alias].keep:
+                                    sp.contents[group][new_alias] = self.groups[group].series[header].unit
+                                    del new_contents[group][new_alias]
+#                                print('sp.contents after replace: ',sp.contents)
+                                  # delete the entry in new_contents so we can just dump the rest into AF.available_data
+                                if not new_contents[group]: del new_contents[group]  # scrap any now-empty groups
+#                                print('new contents after replace: ',new_contents)
+            AF.available_data = new_contents
             SF.search(SF.searchAvailable, SF.available, AF.available_data)
+            self.parent.groups = self.groups
+            sp = AF.current_sps
+            if len(sp) == 1:
+                sp[0].refresh()
+                SF.search(SF.searchPlotted, SF.plotted, sp[0].contents)
+            self.modified = False
+        # should these be copies?
+        # should I clear the manager's groups/data_dict after saving? IN THIS CASE THEY WOULD NEED TO BE COPIES!!
+
 
     def closeEvent(self, event):
         if self.modified:

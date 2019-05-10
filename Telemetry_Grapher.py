@@ -7,10 +7,9 @@ Created on Mon May  6 14:56:29 2019
 from PyQt5.QtWidgets import *
 
 class Telemetry_Grapher(QMainWindow):
-    def __init__(self, groups={}, data_dict={}):
+    def __init__(self, groups={}):
         super().__init__()
         self.groups = copy.deepcopy(groups)
-        self.data_dict = copy.deepcopy(data_dict)
 
         self.unit_dict = {  # dictionary of supported units
                 'Position':['nm','μm','mm','cm','m'],
@@ -153,6 +152,7 @@ class Telemetry_Grapher(QMainWindow):
         ### Delete later, just for speed
         self.open_data_manager()
 
+    # I could move this and the unit_dicts/clarify dictionaries to DM, and have it read/write from/to a .txt file
     def get_unit_type(self, unit):
         for e in self.unit_dict:
             if unit in self.unit_dict[e]:
@@ -198,8 +198,8 @@ class Telemetry_Grapher(QMainWindow):
 #            endCondition = lambda index: index == True
 #        else:
 #            endCondition = lambda index: index <= self.end
-        if self.start is None: self.start = min([self.data[name].index[0] for name in self.data.keys()])
-        if self.end is None: self.end = max([self.data[name].index[-1] for name in self.data.keys()])
+        if self.start is None: self.start = min([self.groups[name].data.index[0] for name in self.groups.keys()])
+        if self.end is None: self.end = max([self.groups[name].data.index[-1] for name in self.groups.keys()])
         self.timespan = pd.to_datetime(self.end)-pd.to_datetime(self.start)
         if self.timespan < dt.timedelta(days=1):
             self.dotsize = 0.8

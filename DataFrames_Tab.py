@@ -32,11 +32,14 @@ class DataFrames_Tab(QWidget):
             self.grid.addWidget(w, *p)
         self.setLayout(self.grid)
 
+        if self.selectGroup.currentText():
+            self.display_dataframe()
+
     def display_dataframe(self):
         DM = self.parent
-        name = self.selectGroup.currentText()
+        group = self.selectGroup.currentText()
         # need to work in renaming here
-#        df = DM.groups[name].data
+#        df = DM.groups[group].data
 
 #        series_units = self.parent.data_dict[self.selectGroup.currentText()]
 #        self.headerTable.setRowCount(len(series_units))

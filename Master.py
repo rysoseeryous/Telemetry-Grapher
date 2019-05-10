@@ -28,19 +28,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 #from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-#import class Telemetry_Grapher
-#import Control_Frame
-#import Axes_Frame
-#import Series_Frame
-#import Subplot_Manager
-#
-#import Data_Manager
-#import Group
-#import Import_Tab
-#import Configure_Tab
-#import DataFrames_Tab
-#import Import_Preferences
-#import Unit_Settings
 
 if 'app' not in locals():
     app = QCoreApplication.instance()

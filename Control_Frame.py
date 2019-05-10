@@ -301,6 +301,7 @@ class Control_Frame(QWidget):
 #        sp.host().plot([1,2,3,4])
 #        AF.draw()
 
+        # real function
         TG = self.parent
         AF = TG.axes_frame
         AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)

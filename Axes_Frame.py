@@ -17,7 +17,7 @@ class Axes_Frame(FigureCanvas):
         ax0 = self.fig.add_subplot(gs[0])
         self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
         self.current_sps = []
-        self.available_data = copy.deepcopy(parent.data_dict)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
+        self.available_data = copy.deepcopy(parent.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
         self.fig.suptitle(parent.control_frame.titleEdit.text(), fontsize=20)
         mpl.rc('font', family='serif')
@@ -36,6 +36,7 @@ class Axes_Frame(FigureCanvas):
             'I':'g',
             'P':'y',
         }
+        # This will be deprecated in favor of markers (or add the option to preferences QDockWidget)
         self.linestyles = [  # when color coordination is on, use linestyles in this order to differentiate series
             '-',
             '--',

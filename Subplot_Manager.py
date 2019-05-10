@@ -11,7 +11,7 @@ class Subplot_Manager():
         self.parent = parent
         self.axes = [host]  # keeps track of parasitic axes
         self.order = order  # keeps track of preferred unit order
-        self.contents = contents # standard contents format: {name: {series:units}}
+        self.contents = contents # standard contents format: {group: {headers:units}} in the context of display
         self.index = index  # convenience attribute
         self.legend = legend  # legend toggle
         self.colorCoord = colorCoord  # color coordination toggle
@@ -30,8 +30,8 @@ class Subplot_Manager():
 ##        style_dict = {}
 ##        lines = []
 #        if self.contents is not None:
-#            for name, series_units in self.contents.items():
-#                for series, unit in series_units.items():
+#            for group, aliases_units in self.contents.items():
+#                for series, unit in aliases_units.items():
 #                    if self.order[0] is None:
 #                        self.order[0] = unit  # if no order given, default to sorted order
 #                    if unit not in self.order:
@@ -40,7 +40,7 @@ class Subplot_Manager():
 #                    while len(self.axes) < len(self.order): # extend sp.axes as needed
 #                        self.axes.append(self.host().twinx())
 #                    ax = self.axes[ax_index]
-#                    line, = ax.plot(FW.data[name][series])
+#                    line, = ax.plot(FW.data[group][header])
 #                    ax.set_ylabel(AF.unit_dict[unit])
 #        AF.draw()
 
@@ -65,9 +65,11 @@ class Subplot_Manager():
         color_index = 0
         style_dict = {}
         lines = []
+        labels = []
         if sp.contents is not None:
-            for name, series_units in sp.contents.items():
-                for series, unit in series_units.items():
+            for group, aliases_units in sp.contents.items():
+                for alias, unit in aliases_units.items():
+                    # Determine which axes to plot on, depending on sp.order
                     if sp.order[0] is None:
                         sp.order[0] = unit  # if no order given, default to sorted order
                     if unit not in sp.order:
@@ -77,8 +79,10 @@ class Subplot_Manager():
                         par = sp.host().twinx()
                         sp.axes.append(par)
                     par = sp.axes[ax_index]  # get axis (parasitic or host) at index of unit
+
+                    # Manage colors and styles
                     if sp.colorCoord:
-                        if unit not in style_dict:  # keep track of how many series are plotted in each unit
+                        if unit not in style_dict:  # keep track of how many series are plotted in each unit to cycle through linestyles(/markerstyles TBI)
                             style_dict[unit] = 0
                         style_counter = style_dict[unit]
                         style_dict[unit] = style_counter+1
@@ -94,20 +98,29 @@ class Subplot_Manager():
                         color_index += 1
                         style = None
                         par.yaxis.label.set_color('k')
-                    line, = par.plot(TG.groups[name].data[series], color=color, linestyle=style,
+
+                    # Fetch data to plot from references in sp.contents
+                    try:
+                        header = TG.groups[group].alias_dict[alias]
+                    except KeyError:
+                        header = alias
+                    scale = TG.groups[group].series[header].scale
+                    data = [x*scale for x in TG.groups[group].data[header]]
+                    line, = par.plot(data, color=color, linestyle=style,
                                      marker='o', markersize=TG.dotsize, fillstyle='full', markeredgewidth=TG.dotsize, linewidth=0.75)
                     lines.append(line)
+                    labels.append(alias)
                     try:
                         par.set_ylabel(AF.unit_dict[unit])  # set ylabel to formal unit description
                     except KeyError:
                         par.set_ylabel(unit)  # if not defined in unit_dict, use as-assigned
+
             for i,par in enumerate(sp.axes[1:]):  # offset parasitic axes
                 self.make_patch_spines_invisible(par)
                 par.spines["right"].set_visible(True)
                 par.spines["right"].set_position(("axes", 1+.05*(i)))
             if sp.legend:  # create and offset legend
                 if 'i' not in locals(): i = -1
-                labels = [line.get_label() for line in lines]
                 leg = sp.host().legend(lines, labels, bbox_to_anchor=(1+.05*(i+1), .5), loc="center left")
                 for line in leg.get_lines(): line.set_linewidth(2)
         sp.host().grid(b=True, axis='x')
