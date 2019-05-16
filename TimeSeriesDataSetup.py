@@ -4,6 +4,11 @@ Created on Thu May  2 10:45:26 2019
 
 @author: seery
 """
+
+### OUT OF DATE ###
+# data and data_dict are no longer used by Telemetry Grapher. See Data Manager for internal database format.
+
+
 import os
 import re
 import warnings
