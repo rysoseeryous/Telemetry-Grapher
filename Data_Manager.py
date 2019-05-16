@@ -4,8 +4,6 @@ Created on Mon May  6 15:02:46 2019
 
 @author: seery
 """
-from PyQt5.QtWidgets import *
-
 class Data_Manager(QDialog):
     def __init__(self, parent):
         super().__init__()
@@ -14,17 +12,20 @@ class Data_Manager(QDialog):
         self.setWindowIcon(QIcon('satellite.png'))
 
         self.groups = copy.deepcopy(parent.groups)  # copy so that if you can still discard changes
+        self.group_reassign = {name:[] for name in self.groups}  # for renaming groups
+#        print(self.group_reassign)
         self.modified = False
 
         self.resize(1000,500)
         self.grid = QGridLayout()
         self.tabBase = QTabWidget()
+        self.tabBase.setStyleSheet("QTabBar::tab {height: 30px; width: 300px} QTabWidget::tab-bar {alignment:center;}")
         self.tabBase.currentChanged.connect(self.refresh_tab)
         self.save = QPushButton('Save')
         self.save.setDefault(True)
         self.save.clicked.connect(self.save_changes)
         self.cancel = QPushButton('Cancel')
-#        self.cancel.clicked.connect(self.closeEvent)  # AttributeError: 'bool' object has no attribute 'accept' -> from event.accept()
+        self.cancel.clicked.connect(self.close)  # AttributeError: 'bool' object has no attribute 'accept' -> from event.accept()
         msgLog = QLabel('Message Log:')
         self.messageLog = QTextEdit()
         self.messageLog.setReadOnly(True)
@@ -40,29 +41,30 @@ class Data_Manager(QDialog):
 
         self.setLayout(self.grid)
         self.import_tab = Import_Tab(self)
+        self.dataframes_tab = DataFrames_Tab(self)
         self.configure_tab = Configure_Tab(self)
-        self.dataframes_tab = DataFrames_Tab(self)  # eventually make your own tab class
         self.tabBase.addTab(self.import_tab, 'Import')
         self.tabBase.addTab(self.configure_tab, 'Configure')
         self.tabBase.addTab(self.dataframes_tab, 'DataFrames')
 
-    def refresh_tab(self):
-        pass
-    # might be entirely unnecessary because the tables are updated when select group is changed
-    # and select group's index changed signal is called every time an item is added, that is, every time a group is imported.
+    def keyPressEvent(self, event):
+        """Close application from escape key.
 
-#        if self.tabBase.currentIndex() == 1:  # hard coded - this will break if I ever rearrange the tabs. But I think that's ok.
-#            # Configure Tab
-#
-#        elif self.tabBase.currentIndex() == 2:
-#            # DataFrames Tab
+        results in QMessageBox dialog from closeEvent, good but how/why?
+        """
+        if event.key() == Qt.Key_Escape:
+            self.close()
 
-#            self.feedback('Configure Tab Selected')
-#            self.feedback('Group: '.format(self.configure_tab.selectGroup.currentText()))
-            # repopulate configure tab's table with header info from its currently selected group
+    def refresh_tab(self, tab_index):
+        if self.tabBase.currentIndex() == 1:  # hard coded - this will break if I ever rearrange the tabs. But I think that's ok.
+            # Configure Tab
+            self.configure_tab.display_header_info()
+        elif self.tabBase.currentIndex() == 2:
+            # DataFrames Tab
+            self.dataframes_tab.display_dataframe()
 
     def popup(self, text, informative=None, details=None, buttons=2):
-        """Brings up a message box with provided text and returns Ok or Cancel"""
+        """Brings up a message box with provided text and returns Ok or Cancel."""
         self.prompt = QMessageBox()
         self.prompt.setWindowTitle("HEY.")
         self.prompt.setIcon(QMessageBox.Question)
@@ -89,14 +91,10 @@ class Data_Manager(QDialog):
 
     def save_changes(self):
         if self.modified:
-#            for group in self.groups:
-#                for header in self.groups[group].series:
-#                    print(header, ': ', self.groups[group].series[header].alias)
-#                    print(header, ': ', self.groups[group].series[header].alias)
-#                    print(header, ': ', self.groups[group].series[header].alias)
             SF = self.parent.series_frame
             ### Eventually, loop this through all open axes frames (excel tab implementation)
             AF = self.parent.axes_frame
+            self.parent.groups = self.groups
 
             # Get new alias/unit information from self.groups
             new_contents = {}
@@ -113,52 +111,57 @@ class Data_Manager(QDialog):
                         units.append(self.groups[group].series[header].unit)
                 new_contents.update({group: dict(zip(aliases, units))})
 
-            # Look up headers from aliases in self.parent.groups
-            # Map those headers to their new aliases and units
-                # Do this through AF.available_data and AF.subplots
-#            print('new_contents:',new_contents,'\n')
-
+            # Rename/delete groups in subplots first
             for sp in AF.subplots:
-                content_groups = copy.deepcopy(tuple(sp.contents.keys()))
-                for group in content_groups:
-                    # delete top-level groups in subplot if group was deleted.
-                    #THIS MEANS that if you edited the source files, and reimported with a different name and the same data, the data will be removed from the figure
-#                    print('group: ',group)
-                    if group not in new_contents:
-                        del sp.contents[group]
-                    else:
-                        aliases = copy.deepcopy(tuple(sp.contents[group].keys()))  # define loop elements first so it doesn't change size during iteration
-#                        print('aliases: ', aliases)
-                        for alias in aliases:
-#                            print('\ncurrent alias_dict: ',self.parent.groups[group].alias_dict)
-                            try:
-                                header = self.parent.groups[group].alias_dict[alias]  # get original header of each alias in sp.contents
-                            except KeyError:  # if original header being used as alias (because no alias was assigned)
-                                header = alias
-#                            print('alias: header  ->  ', alias,': ',header)
-                            del sp.contents[group][alias]  # scrap old alias entry
-#                            print('sp.contents after del: ', sp.contents)
-#                            print('new series: ',self.groups[group].series)
-                            if header in self.groups[group].series:  # if original header regonized in new groups dictionary
-                                new_alias = self.groups[group].series[header].alias
-                                if new_alias is None: new_alias = header
-                                if self.groups[group].series[new_alias].keep:
-                                    sp.contents[group][new_alias] = self.groups[group].series[header].unit
-                                    del new_contents[group][new_alias]
-#                                print('sp.contents after replace: ',sp.contents)
-                                  # delete the entry in new_contents so we can just dump the rest into AF.available_data
-                                if not new_contents[group]: del new_contents[group]  # scrap any now-empty groups
-#                                print('new contents after replace: ',new_contents)
+                for group in copy.deepcopy(tuple(sp.contents.keys())):
+#                    print('MW group: ',group)
+                    if group not in new_contents:  # if not recognized
+#                        print('group_reassign: ',self.group_reassign)
+                        if group in self.group_reassign:  # check if it's been renamed
+                            new_name = self.group_reassign[group][-1]
+                            sp.contents[new_name] = sp.contents[group]  # if so, take the most recent renaming
+                        del sp.contents[group]  # scrap the old one
+#                print('sp.contents: ',sp.contents)
+
+            # Rename/delete series in subplots
+            for sp in AF.subplots:
+                for group in sp.contents:
+                    aliases = copy.deepcopy(tuple(sp.contents[group].keys()))  # define loop elements first so it doesn't change size during iteration
+#                    print('aliases: ', aliases)
+                    new_series = self.groups[group].series
+#                    print('new series: ',new_series.keys())
+                    for alias in aliases:
+                        del sp.contents[group][alias]  # scrap old alias entry (no matter what)
+#                        print('sp.contents after del: ', sp.contents)
+#                        print('\ncurrent alias_dict: ',self.parent.groups[group].alias_dict)
+                        try:
+                            header = self.parent.groups[group].alias_dict[alias]  # get original header of each alias in sp.contents
+                        except KeyError:  # if original header being used as alias (because no alias was assigned)
+                            header = alias
+#                        print('alias: header  ->  ', alias,': ',header)
+                        if header in new_series and new_series[header].keep:  # if original header recognized in new groups
+                            new_alias = new_series[header].alias
+                            if not new_alias: new_alias = header
+#                            print('new alias: ',new_alias)
+                            sp.contents[group][new_alias] = new_series[header].unit  # make new entry with new_alias
+                            del new_contents[group][new_alias]
+#                            print('sp.contents after replace: ',sp.contents)
+                              # delete the entry in new_contents so we can just dump the rest into AF.available_data
+                        if not new_contents[group]: del new_contents[group]  # scrap any now-empty groups
+#                        print('new contents after replace: ',new_contents)
+                sp.refresh()
+
+            # Dump everything else into AF.available_data
             AF.available_data = new_contents
+            SF.available.clear()
             SF.search(SF.searchAvailable, SF.available, AF.available_data)
-            self.parent.groups = self.groups
+
             sp = AF.current_sps
             if len(sp) == 1:
-                sp[0].refresh()
+                SF.plotted.clear()
                 SF.search(SF.searchPlotted, SF.plotted, sp[0].contents)
+            self.feedback('Saved data to main window.')
             self.modified = False
-        # should these be copies?
-        # should I clear the manager's groups/data_dict after saving? IN THIS CASE THEY WOULD NEED TO BE COPIES!!
 
 
     def closeEvent(self, event):
@@ -166,6 +169,8 @@ class Data_Manager(QDialog):
             if self.popup('Discard changes?') == QMessageBox.Cancel:
                 event.ignore()
             else:
+                QApplication.clipboard().clear()
                 event.accept()
         else:
+            QApplication.clipboard().clear()
             event.accept()

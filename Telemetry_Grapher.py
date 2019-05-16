@@ -4,8 +4,6 @@ Created on Mon May  6 14:56:29 2019
 
 @author: seery
 """
-from PyQt5.QtWidgets import *
-
 class Telemetry_Grapher(QMainWindow):
     def __init__(self, groups={}):
         super().__init__()
@@ -25,7 +23,6 @@ class Telemetry_Grapher(QMainWindow):
                 'Force':['mN','N','kN'],
                 'Torque':['Nmm','Nm','kNm'],
                 'Power':['mW','W','kW'],
-                None:[],
                 }
 
         self.unit_clarify = {  # try to map parsed unit through this dict before comparing to TG unit_dict
@@ -34,23 +31,35 @@ class Telemetry_Grapher(QMainWindow):
                 'C':'°C',
                 'F':'°F',
                 }
-        # maybe scrap whole idea of default units. Just make sure that all units are the same. Can convert units in Unit Settings maybe?
-#        self.unit_defaults = {  # dictionary of default units
-#                'Position':'m',
-#                'Velocity':'m/s',
-#                'Acceleration':'m/s^2',  # check how superscripts are parsed
-#                'Angle':'deg',
-#                'Temperature':'°C',
-#                'Pressure':'Pa',
-#                'Heat':'J',
-#                'Voltage':'V',
-#                'Current':'A',
-#                'Resistance':'Ω',
-#                'Force':'N',
-#                'Torque':'Nm',
-#                'Power':'W',
-#                None:[None],
-#                }
+
+        self.color_dict = {
+                'Position':'C0',
+                'Velocity':'C1',
+                'Acceleration':'C2',
+                'Angle':'C3',
+                'Temperature':'C4',
+                'Pressure':'C5',
+                'Heat':'C6',
+                'Voltage':'C7',
+                'Current':'C8',
+                'Resistance':'C9',
+                'Force':'b',
+                'Torque':'g',
+                'Power':'r',
+                None:'k'
+                }
+
+        self.markers = [  # when color coordination is on, use markers in this order to differentiate series
+                'o',
+                '+',
+                'x',
+                'D',
+                's',
+                '^',
+                'v',
+                '<',
+                '>',
+            ]
 
         self.start = '2018-12-06 00:00'
         self.end = '2018-12-09 00:00'  # dummy start/end from PHI_HK, default will be None
@@ -59,6 +68,10 @@ class Telemetry_Grapher(QMainWindow):
         self.statusBar().showMessage('No subplot selected')
         self.fig_preferences()
         self.manager = QWidget()
+
+        self.docked_FS = QDockWidget("Figure Settings", self)
+        self.figure_settings = Figure_Settings(self)
+        self.docked_FS.setWidget(self.figure_settings)
 
         self.docked_CF = QDockWidget("Control Frame", self)
         self.control_frame = Control_Frame(self)
@@ -72,9 +85,12 @@ class Telemetry_Grapher(QMainWindow):
         self.series_frame = Series_Frame(self)
         self.docked_SF.setWidget(self.series_frame)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_SF)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.docked_CF)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_CF)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)  # Currently non-functional
+        self.docked_FS.hide()
 
-        self.resizeDocks([self.docked_SF], [600], Qt.Horizontal)
+
+        self.resizeDocks([self.docked_SF], [450], Qt.Horizontal)
 
         fileMenu = self.menuBar().addMenu('File')
         newAction = QAction('New', self)
@@ -108,9 +124,9 @@ class Telemetry_Grapher(QMainWindow):
         refreshAction.setShortcut('Ctrl+R')
         refreshAction.triggered.connect(self.refresh_all)
 #        resetAction = QAction('Undo', self)
-#        resetAction.setShortcut('Ctrl+Z')
-#        resetAction.setStatusTip('Undo last action')
-#        resetAction.triggered.connect(self.undo)
+#        resetAction.setShortcut('Ctrl+Z')  # wrong
+#        resetAction.setStatusTip('Undo last action')  #wrong
+#        resetAction.triggered.connect(self.undo)  #wrong
         editMenu.addAction(undoAction)
         editMenu.addAction(redoAction)
         editMenu.addAction(refreshAction)
@@ -147,12 +163,15 @@ class Telemetry_Grapher(QMainWindow):
         viewMenu.addAction(darkAction)
 
         self.showMaximized()
-        self.control_frame.setFixedHeight(self.control_frame.height())
+        ### Adding Figure Settings dock to right side currently screws this up
+        self.control_frame.setFixedHeight(self.control_frame.height()) #(98 on my screen)
+        self.control_frame.setFixedWidth(self.control_frame.width()) #(450 on my screen)
 
         ### Delete later, just for speed
         self.open_data_manager()
 
     # I could move this and the unit_dicts/clarify dictionaries to DM, and have it read/write from/to a .txt file
+    # ^ No, I don't think you can. DM is a QDialog and all its information will be lost when it's closed.
     def get_unit_type(self, unit):
         for e in self.unit_dict:
             if unit in self.unit_dict[e]:
@@ -161,7 +180,7 @@ class Telemetry_Grapher(QMainWindow):
 
     def closeEvent(self, event):
         """Hides any floating QDockWidgets and closes all created figures upon application exit."""
-        for dock in [self.docked_CF, self.docked_SF]: #add preferences window to this later
+        for dock in [self.docked_CF, self.docked_SF, self.docked_FS]:
             if dock.isFloating(): dock.close()
         plt.close('all')
         event.accept()
@@ -216,9 +235,11 @@ class Telemetry_Grapher(QMainWindow):
             self.major_locator = mdates.HourLocator(interval=2)
 
     def toggle_docks(self):
-        # make toggle instead of only show
-        self.docked_CF.show()
-        self.docked_SF.show()
+        docks = [self.docked_CF, self.docked_SF, self.docked_FS]
+        if any([not dock.isVisible() for dock in docks]):
+            for dock in docks: dock.show()
+        else:
+            for dock in docks: dock.hide()
 
     def toggle_interactive(self):
         pass

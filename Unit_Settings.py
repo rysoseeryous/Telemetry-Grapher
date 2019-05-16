@@ -4,8 +4,6 @@ Created on Thu May  9 10:43:47 2019
 
 @author: seery
 """
-from PyQt5.QtWidgets import *
-
 class Unit_Settings(QDialog):
     def __init__(self, parent):
         super().__init__()

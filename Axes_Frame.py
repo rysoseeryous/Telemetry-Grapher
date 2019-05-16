@@ -4,8 +4,6 @@ Created on Mon May  6 14:58:42 2019
 
 @author: seery
 """
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
 class Axes_Frame(FigureCanvas):
     """Container for figure with subplots. New Axes_Frame objects are created and when a new Figure tab is created (TBI)."""
     def __init__(self, parent):
@@ -22,29 +20,6 @@ class Axes_Frame(FigureCanvas):
         self.fig.suptitle(parent.control_frame.titleEdit.text(), fontsize=20)
         mpl.rc('font', family='serif')
         self.draw()
-
-        ### These will be moved to plotting preferences QDockWidget
-        self.unit_dict = {  # ylabels for each unit type so units can be identified by shorthand letters
-            'T':'Temperature [°C]',
-            'V':'Voltage [V]',
-            'I':'Current [A]',
-            'P':'Power [W]'
-        }
-        self.color_dict = {  #when color coordination is on, assign map unit types to these colors
-            'T':'r',
-            'V':'b',
-            'I':'g',
-            'P':'y',
-        }
-        # This will be deprecated in favor of markers (or add the option to preferences QDockWidget)
-        self.linestyles = [  # when color coordination is on, use linestyles in this order to differentiate series
-            '-',
-            '--',
-            '-.',
-            ':',
-        ]
-
-
 
     def select_subplot(self, event, force_select=None):
         """Highlights clicked-on subplot and displays subplot contents in plotted tree.
@@ -71,6 +46,8 @@ class Axes_Frame(FigureCanvas):
                 self.current_sps = []
 
         if force_select is not None:
+            highlight(self.subplots, invert=True)
+            self.current_sps = []
             highlight(force_select)
         else:
             if event.inaxes is None:

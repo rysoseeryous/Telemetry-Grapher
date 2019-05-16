@@ -4,14 +4,13 @@ Created on Mon May  6 14:57:54 2019
 
 @author: seery
 """
-
 class Subplot_Manager():
     """Wrapper around subplot object (host). Keeps track of contents and settings of each subplot."""
-    def __init__(self, parent, host, order=[None], contents={}, weight=1, index=None, fig_index=0, legend=False, colorCoord=False):
+    def __init__(self, parent, host, contents={}, order=[None], index=None, legend=False, colorCoord=False):
         self.parent = parent
         self.axes = [host]  # keeps track of parasitic axes
-        self.order = order  # keeps track of preferred unit order
         self.contents = contents # standard contents format: {group: {headers:units}} in the context of display
+        self.order = order  # keeps track of preferred unit order
         self.index = index  # convenience attribute
         self.legend = legend  # legend toggle
         self.colorCoord = colorCoord  # color coordination toggle
@@ -66,38 +65,49 @@ class Subplot_Manager():
         style_dict = {}
         lines = []
         labels = []
+#        print('sp.axes: ',sp.axes)
+#        print('sp.contents: ',sp.contents)
+#        print('sp.order: ',sp.order)
+#        print('sp.index: ',sp.index,'\n')
         if sp.contents is not None:
             for group, aliases_units in sp.contents.items():
                 for alias, unit in aliases_units.items():
+                    unit_type = TG.get_unit_type(unit)
+#                    print('Alias: {}  Unit: {}'.format(alias,unit))
                     # Determine which axes to plot on, depending on sp.order
                     if sp.order[0] is None:
                         sp.order[0] = unit  # if no order given, default to sorted order
                     if unit not in sp.order:
                         sp.order.append(unit)  # new units go at the end of the order
+#                    print('After Order Logic: ',sp.order)
                     ax_index = sp.order.index(unit)  # get index of unit in unit order
+#                    print('ax_index: ',ax_index)
+#                    print('sp.axes: ',sp.axes)
                     while len(sp.axes)-1 < ax_index: # extend sp.axes as needed
                         par = sp.host().twinx()
                         sp.axes.append(par)
-                    par = sp.axes[ax_index]  # get axis (parasitic or host) at index of unit
+#                    print('sp.axes After Twinx Extension: ',sp.axes)
+                    ax = sp.axes[ax_index]  # get axis (parasitic or host) at index of unit
 
                     # Manage colors and styles
                     if sp.colorCoord:
-                        if unit not in style_dict:  # keep track of how many series are plotted in each unit to cycle through linestyles(/markerstyles TBI)
-                            style_dict[unit] = 0
-                        style_counter = style_dict[unit]
-                        style_dict[unit] = style_counter+1
-                        try:  # assign color based on unit, black if undefined
-                            color = AF.color_dict[unit]
-                        except KeyError:
-                            color = 'k'
-                            print('Unit {} has no assigned color in Axes_Frame.color_dict'.format(unit))
-                        style = AF.linestyles[style_counter%len(AF.linestyles)]
-                        par.yaxis.label.set_color(color)
+                        if unit_type not in style_dict:  # keep track of how many series are plotted in each unit to cycle through linestyles(/markerstyles TBI)
+                            style_dict[unit_type] = 0
+                        style_counter = style_dict[unit_type]
+                        style_dict[unit_type] = style_counter+1
+                        style = TG.markers[style_counter%len(TG.markers)]
+#                        try:  # assign color based on unit, black if undefined
+                        color = TG.color_dict[unit_type]
+#                        except KeyError:
+#                            color = 'k'
+#                            print('Unit {} has no assigned color in Axes_Frame.color_dict'.format(unit))
+
+                        ax.yaxis.label.set_color(color)
                     else:  # set color to rotate through default colormap (otherwise colormap is done per axis, not the whole subplot)
                         color='C'+str(color_index%10)
                         color_index += 1
-                        style = None
-                        par.yaxis.label.set_color('k')
+                        style = 'o'
+                        ax.yaxis.label.set_color('k')
 
                     # Fetch data to plot from references in sp.contents
                     try:
@@ -106,24 +116,24 @@ class Subplot_Manager():
                         header = alias
                     scale = TG.groups[group].series[header].scale
                     data = [x*scale for x in TG.groups[group].data[header]]
-                    line, = par.plot(data, color=color, linestyle=style,
-                                     marker='o', markersize=TG.dotsize, fillstyle='full', markeredgewidth=TG.dotsize, linewidth=0.75)
+                    timestamp = TG.groups[group].data.index
+                    line, = ax.plot(timestamp, data,
+                                    style, color=color, markersize=TG.dotsize, markeredgewidth=TG.dotsize, linestyle='None')
                     lines.append(line)
                     labels.append(alias)
-                    try:
-                        par.set_ylabel(AF.unit_dict[unit])  # set ylabel to formal unit description
-                    except KeyError:
-                        par.set_ylabel(unit)  # if not defined in unit_dict, use as-assigned
+                    if unit_type is not None:  # if no units, leave axis unlabeled
+                        ax.set_ylabel('{} [{}]'.format(unit_type, unit))  # set ylabel to formal unit description
 
             for i,par in enumerate(sp.axes[1:]):  # offset parasitic axes
                 self.make_patch_spines_invisible(par)
                 par.spines["right"].set_visible(True)
                 par.spines["right"].set_position(("axes", 1+.05*(i)))
-            if sp.legend:  # create and offset legend
+            if sp.legend and sp.contents:  # create and offset legend
                 if 'i' not in locals(): i = -1
-                leg = sp.host().legend(lines, labels, bbox_to_anchor=(1+.05*(i+1), .5), loc="center left")
-                for line in leg.get_lines(): line.set_linewidth(2)
+                leg = sp.host().legend(lines, labels, bbox_to_anchor=(1+.05*(i+1), .5), loc="center left", markerscale=10)
         sp.host().grid(b=True, axis='x')
+
+
 #        base_X = AF.subplots[-1].axes[0]
 #        plt.sca(base_X)
 #        for sp in AF.subplots:

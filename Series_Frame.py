@@ -4,8 +4,6 @@ Created on Mon May  6 14:57:32 2019
 
 @author: seery
 """
-from PyQt5.QtWidgets import *
-
 class Series_Frame(QWidget):
     """Manages imported data. Shows hierarchically the series (with assigned units) available to plot and the series plotted in the selected subplot(s)."""
 
@@ -18,10 +16,12 @@ class Series_Frame(QWidget):
         ncols = 2
         self.available = QTreeWidget(w)
         self.available.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.available.setSortingEnabled(True)
         self.available.setHeaderLabels(["Available Series", "Unit"])
         self.available.setColumnCount(ncols)
         self.plotted = QTreeWidget(w)
         self.plotted.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.plotted.setSortingEnabled(True)
         self.plotted.setHeaderLabels(["Plotted Series", "Unit"])
         self.available.setColumnCount(ncols)
         self.add = QPushButton('Add')
