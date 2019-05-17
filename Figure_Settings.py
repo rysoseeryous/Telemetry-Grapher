@@ -18,44 +18,65 @@ class Figure_Settings(QWidget):
         super().__init__()
         self.parent = parent
         TG = self.parent
-### ALSO INCLUDE START/END TIME FOR PLOTTING
 
-
+        mpl.rc('font', family='serif')  # controlable later maybe
         # Read saved values from .txt file
 
         grid = QGridLayout()
-        figBounds = QLabel('Figure Dimensions')
-        figUpper = QLabel('Top')
-        self.figUpper = QSpinBox()
-        figLower = QLabel('Bottom')
-        self.figLower = QSpinBox()
-        figLeft = QLabel('Left')
-        self.figLeft = QSpinBox()
-        figRight = QLabel('Right')
-        self.figRight = QSpinBox()
-        hspace = QLabel('Spacing')
-        self.hspace = QSpinBox()
-        parOffset = QLabel('Secondary Axis Offset')
-        self.parOffset = QSpinBox()
-        legendOffset = QLabel('Legend Offset')
-        self.legendOffset = QSpinBox()
-        tickRot = QLabel('Tick Rotation')
-        self.tickRot = QSpinBox()
 
-        gridToggles = QLabel('Axes Settings')
+        figBounds = QLabel('Figure Dimensions')
+        figBounds.setAlignment(Qt.AlignCenter)
+        figHeight = QLabel('Height')
+        self.figHeight = QDoubleSpinBox()
+        self.figHeight.setRange(0, 1)
+        self.figHeight.setSingleStep(.01)
+        self.figHeight.setValue(.90)
+        figWidth = QLabel('Width')
+        self.figWidth = QDoubleSpinBox()
+        self.figWidth.setRange(0, 1)
+        self.figWidth.setSingleStep(.01)
+        self.figWidth.setValue(.90)
+        hspace = QLabel('V Offset')
+        self.hspace = QDoubleSpinBox()
+        self.hspace.setRange(0, 1)
+        self.hspace.setSingleStep(.01)
+        self.hspace.setValue(.05)
+        parOffset = QLabel('H Offset')
+        self.parOffset = QDoubleSpinBox()
+        self.parOffset.setRange(0, 1)
+        self.parOffset.setSingleStep(.01)
+        self.parOffset.setValue(.05)
+        legendOffset = QLabel('Legend Offset')
+        self.legendOffset = QDoubleSpinBox()
+        self.legendOffset.setRange(0, 1)
+        self.legendOffset.setSingleStep(.01)
+        self.legendOffset.setValue(.1)
+
+        gridToggles = QLabel('Grid Settings')
+        gridToggles.setAlignment(Qt.AlignCenter)
         self.majorXgrid = QCheckBox('Major X')
         self.minorXgrid = QCheckBox('Minor X')
         self.majorYgrid = QCheckBox('Major Y')
         self.minorYgrid = QCheckBox('Minor Y')
 
-        labelSettings = QLabel('Text Settings')
-        self.font = QPushButton('Font')
-        labelSize = QLabel('Axis Label Size')
-        self.labelSize = QComboBox()
-        titleSize = QLabel('Title Size')
-        self.titleSize = QComboBox()
+        textSettings = QLabel('Text Settings')
+        textSettings.setAlignment(Qt.AlignCenter)
+        titleSize = QLabel('Title')
+        self.titleSize = QSpinBox()
+        self.titleSize.setRange(0, 60)
+        self.titleSize.setValue(20)
+        labelSize = QLabel('Axis Labels')
+        self.labelSize = QSpinBox()
+        self.labelSize.setRange(0, 60)
+        self.labelSize.setValue(12)
         tickSize = QLabel('Tick Size')
-        self.tickSize = QComboBox()
+        self.tickSize = QSpinBox()
+        self.tickSize.setRange(0, 20)
+        self.tickSize.setValue(10)
+        tickRot = QLabel('Tick Rotation')
+        self.tickRot = QSpinBox()
+        self.tickRot.setRange(0, 90)
+        self.tickRot.setValue(50)
 
         self.dlg = QColorDialog()
         for i, unit_type in enumerate(TG.unit_dict):
@@ -73,48 +94,38 @@ class Figure_Settings(QWidget):
 
         widgets = [
                 figBounds,
+                figHeight,
+                self.figHeight,
+                figWidth,
+                self.figWidth,
                 hspace,
                 self.hspace,
-                figUpper,
-                self.figUpper,
-                figLower,
-                self.figLower,
-                figLeft,
-                self.figLeft,
-                figRight,
-                self.figRight,
                 parOffset,
                 self.parOffset,
                 legendOffset,
                 self.legendOffset,
-                tickRot,
-                self.tickRot,
+
                 gridToggles,
                 self.majorXgrid,
                 self.minorXgrid,
                 self.majorYgrid,
                 self.minorYgrid,
-                labelSettings,
-                self.font,
-                labelSize,
-                self.labelSize,
+
+                textSettings,
                 titleSize,
                 self.titleSize,
+                labelSize,
+                self.labelSize,
                 tickSize,
                 self.tickSize,
+                tickRot,
+                self.tickRot,
+
                 self.unit_table,
                 ]
 
         positions = [
-                (0,0,1,2),  # Figure Dimensions
-                (1,0,1,1),
-                (1,1,1,1),
-                (2,0,1,1),
-                (2,1,1,1),
-                (3,0,1,1),
-                (3,1,1,1),
-                (4,0,1,1),
-                (4,1,1,1),
+                (4,0,1,2),  # Figure Dimensions
                 (5,0,1,1),
                 (5,1,1,1),
                 (6,0,1,1),
@@ -123,26 +134,56 @@ class Figure_Settings(QWidget):
                 (7,1,1,1),
                 (8,0,1,1),
                 (8,1,1,1),
-                (9,0,1,2),  # Axes Settings
-                (10,0,1,2),
-                (11,0,1,2),
-                (12,0,1,2),
-                (13,0,1,2),
-                (14,0,1,2),  # Text Settings
-                (15,0,1,1),
-                (15,1,1,1),
+                (9,0,1,1),
+                (9,1,1,1),
+
+                (11,0,1,2),  # Grid Settings
+                (12,0,1,1),
+                (12,1,1,1),
+                (13,0,1,1),
+                (13,1,1,1),
+
+                (15,0,1,2),  # Text Settings
                 (16,0,1,1),
                 (16,1,1,1),
                 (17,0,1,1),
                 (17,1,1,1),
                 (18,0,1,1),
                 (18,1,1,1),
-                (19,0,1,2),
+                (19,0,1,1),
+                (19,1,1,1),
+
+                (21,0,1,2),  # Color Palette
                 ]
 
         for w, p in zip(widgets, positions):
             grid.addWidget(w, *p)
         self.setLayout(grid)
+
+    def connect_widgets(self, container):
+        widgets = [
+                self.figHeight,
+                self.figWidth,
+                self.hspace,
+                self.parOffset,
+                self.legendOffset,
+
+                self.majorXgrid,
+                self.minorXgrid,
+                self.majorYgrid,
+                self.minorYgrid,
+
+                self.titleSize,
+                self.labelSize,
+                self.tickSize,
+                self.tickRot,
+
+                self.unit_table,
+                ]
+        for w in widgets[0:5]:
+            w.valueChanged.connect(container.refresh_all)
+        for w in widgets[9:13]:
+            w.valueChanged.connect(container.refresh_all)
 
     def pick_color(self):
         colorButton = QObject.sender(self)

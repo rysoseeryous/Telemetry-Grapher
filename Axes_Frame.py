@@ -11,14 +11,53 @@ class Axes_Frame(FigureCanvas):
         self.fig = plt.figure(constrained_layout=False)  # not working with gridspec in controls frame. Look into later.
         super().__init__(self.fig)
         self.weights = [1]
-        gs = gridspec.GridSpec(1, 1, height_ratios=self.weights)
+        FS = self.parent.figure_settings
+        left = (1-FS.figWidth.value())/2
+        right = 1-left
+        bottom = (1-FS.figHeight.value())/2
+        top = 1-bottom
+        gs = gridspec.GridSpec(1, 1, left=left, right=right, bottom=bottom, top=top)
         ax0 = self.fig.add_subplot(gs[0])
         self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
         self.current_sps = []
-        self.available_data = copy.deepcopy(parent.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
+        self.available_data = self.parent.groups_to_contents(parent.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
         self.fig.suptitle(parent.control_frame.titleEdit.text(), fontsize=20)
-        mpl.rc('font', family='serif')
+        self.draw()
+
+    def refresh_all(self):
+        """Refresh entire figure. To be called by TG menubar action and whenever figure_settings/kwargs is updated."""
+        TG = self.parent
+        FS = TG.figure_settings
+        CF = TG.control_frame
+        reselect = [sp.index for sp in self.current_sps]
+        for ax in self.fig.axes: ax.remove()
+
+        n = max([len(sp.axes[2:]) for sp in self.subplots])
+        legOffset = 0
+        for sp in self.subplots:
+            if sp.legend and sp.contents:
+                legOffset = FS.legendOffset.value()
+                break
+        left = (1 - FS.figWidth.value())/2
+        right = 1 - left - FS.parOffset.value()*n - legOffset
+        bottom = (1 - FS.figHeight.value())/2
+        top = 1 - bottom
+        gs = gridspec.GridSpec(len(self.subplots), 1,
+                               height_ratios=self.weights,
+                               left=left, right=right, bottom=bottom, top=top,
+                               hspace=FS.hspace.value())
+        for i, sp in enumerate(self.subplots):
+            ax = self.fig.add_subplot(gs[i, 0])
+            sp.axes = [ax]
+            sp.index = i
+            sp.plot()
+
+        self.fig.suptitle(CF.titleEdit.text(), fontsize=FS.titleSize.value())
+
+        CF.cleanup_axes()
+        CF.weightsEdit.setText(str(self.weights))
+        self.select_subplot(None, force_select=[self.subplots[i] for i in reselect])
         self.draw()
 
     def select_subplot(self, event, force_select=None):

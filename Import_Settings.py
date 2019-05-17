@@ -8,6 +8,7 @@ class Import_Settings(QDialog):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
+        TG = self.parent.parent.parent
         self.resize(750,532)
         self.setWindowTitle('File-Specific Import Settings')
 
@@ -28,7 +29,7 @@ class Import_Settings(QDialog):
         self.kwargTable.setRowCount(len(files))
         self.kwargTable.setHorizontalHeaderLabels(['File', 'Header Row', 'Index Column', 'Skip Rows'])
         for i, file in enumerate(files):
-            kwargs = self.parent.path_kwargs[self.parent.path_dict[file]]
+            kwargs = TG.path_kwargs[self.parent.path_dict[file]]
             self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
             self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
             self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['header'])))
@@ -43,6 +44,7 @@ class Import_Settings(QDialog):
 
     def update_parse_kwargs(self, row, column):
         DM = self.parent.parent
+        TG = DM.parent
         pick_kwargs = {1:'header', 2:'index_col', 3:'skiprows'}
         kwarg = pick_kwargs[column]
         file = self.kwargTable.item(row, 0).text()
@@ -63,7 +65,7 @@ class Import_Settings(QDialog):
                     else:
                         DM.feedback('Only list of unique nonzero integers or \"None\" allowed.')
                         self.kwargTable.blockSignals(True)
-                        self.kwargTable.setItem(row, column, QTableWidgetItem(str(self.parent.path_kwargs[path][kwarg])))
+                        self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
                         self.kwargTable.blockSignals(False)
                         return
             self.kwargTable.blockSignals(True)
@@ -77,17 +79,18 @@ class Import_Settings(QDialog):
             else:
                 DM.feedback('Only integers or \"Auto\" allowed.')
                 self.kwargTable.blockSignals(True)
-                self.kwargTable.setItem(row, column, QTableWidgetItem(str(self.parent.path_kwargs[path][kwarg])))
+                self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
                 self.kwargTable.blockSignals(False)
                 return
         self.kwargTable.blockSignals(True)
         self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
         self.kwargTable.blockSignals(False)
-        self.parent.path_kwargs[path][kwarg] = value
+        TG.path_kwargs[path][kwarg] = value
         self.preview_df()
 
 
     def preview_df(self):
+        TG = self.parent.parent.parent
         selection = self.kwargTable.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
@@ -109,9 +112,9 @@ class Import_Settings(QDialog):
                 self.previewTable.setModel(self.proxy)
 
                 # Highlight selected rows/columns according to parse_kwargs
-                header = self.parent.path_kwargs[path]['header']
-                index_col = self.parent.path_kwargs[path]['index_col']
-                skiprows = self.parent.path_kwargs[path]['skiprows']
+                header = TG.path_kwargs[path]['header']
+                index_col = TG.path_kwargs[path]['index_col']
+                skiprows = TG.path_kwargs[path]['skiprows']
 
                 if index_col == 'Auto': index_col = c
                 if header == 'Auto': header = r
@@ -163,50 +166,3 @@ class Import_Settings(QDialog):
                     for index in selection:
                         column = index.column() - columns[0]
                         model.setData(model.index(index.row(), index.column()), arr[column])
-
-
-#        ncols = 10
-#        df = read_func(file, nrows=nrows+2, usecols=list(range(ncols)), header=None)
-#
-#
-#        for file in pathlist:
-#            mode = 'line' if counter == 1 else 'overwrite'
-#            DM.feedback('Reading files into group \"{}\": ({}/{}) ... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
-#            DM.messageLog.repaint()
-#            counter += 1
-#
-#            # Get parse kwargs associated with file
-#            kwargs = {}
-#            parse_kwargs = self.path_kwargs[file]
-#            kwargs.update(parse_kwargs)
-#            if file.endswith('xls') or file.endswith('xlsx'):
-#                read_func = pd.read_excel
-#            elif file.endswith('csv') or file.endswith('zip'):
-#                read_func = pd.read_csv
-#                kwargs.update({'encoding':'ISO-8859-1', 'sep':',', 'engine':'python'})
-#
-#            # Take header_row and index_col as intersecting cell above first parseable datetime
-#            warnings.filterwarnings('ignore')  # to ignore UserWarning: Discarding nonzero nanoseconds in conversion
-#            kwargs['header'], kwargs['index_col'] = parse_df_origin(file, read_func)
-#
-#            # Override header_row and index_col if not set to 'Auto'
-#            if parse_kwargs['header'] != 'Auto': kwargs['header'] = parse_kwargs['header']
-#            if parse_kwargs['index_col'] != 'Auto': kwargs['index_col'] = parse_kwargs['index_col']
-#            kwargs['skiprows'] = parse_kwargs['skiprows']
-#
-#            try:
-#                if kwargs['header'] is None: raise ValueError  # don't let the user try to read a file with no header row
-#                if kwargs['index_col'] is None: raise ValueError  # don't let the user try to read a file without declaring an index column
-#                raise ValueError
-#                data = read_func(file, **kwargs)
-##                    print(data)
-##                    data.index = pd.to_datetime(data.index, infer_datetime_format=True)
-##                    if any(ts == pd.NaT for ts in data.index): raise ValueError
-#            except ValueError as e:
-#                print(e)
-#                for key in self.path_dict:
-#                    if self.path_dict[key] == file: return key
-#                return file
-#
-#
-#

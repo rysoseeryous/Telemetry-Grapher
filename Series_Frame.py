@@ -200,7 +200,8 @@ class Series_Frame(QWidget):
                 # Add/remove contents from sp
                 self.update_subplot_contents(sp, plottedFunc(sp.contents, contents))
                 # Refresh sp
-                sp.refresh()
+                sp.plot()
+                AF.refresh_all()
                 # Transfer contents to/from available_data
                 AF.available_data = availableFunc(AF.available_data, contents)
                 # Populate both trees with un-search-filtered data

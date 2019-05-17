@@ -91,25 +91,14 @@ class Data_Manager(QDialog):
 
     def save_changes(self):
         if self.modified:
-            SF = self.parent.series_frame
+            TG = self.parent
+            SF = TG.series_frame
             ### Eventually, loop this through all open axes frames (excel tab implementation)
-            AF = self.parent.axes_frame
-            self.parent.groups = self.groups
+            AF = TG.axes_frame
+            TG.groups = self.groups
 
             # Get new alias/unit information from self.groups
-            new_contents = {}
-            for group in self.groups:
-                aliases = []
-                units = []
-                for header in self.groups[group].series.keys():
-                    if self.groups[group].series[header].keep:
-                        alias = self.groups[group].series[header].alias
-                        if alias:
-                            aliases.append(alias)
-                        else:
-                            aliases.append(header)
-                        units.append(self.groups[group].series[header].unit)
-                new_contents.update({group: dict(zip(aliases, units))})
+            new_contents = TG.groups_to_contents(self.groups)
 
             # Rename/delete groups in subplots first
             for sp in AF.subplots:
@@ -149,7 +138,8 @@ class Data_Manager(QDialog):
                               # delete the entry in new_contents so we can just dump the rest into AF.available_data
                         if not new_contents[group]: del new_contents[group]  # scrap any now-empty groups
 #                        print('new contents after replace: ',new_contents)
-                sp.refresh()
+                sp.plot()
+            AF.draw()
 
             # Dump everything else into AF.available_data
             AF.available_data = new_contents

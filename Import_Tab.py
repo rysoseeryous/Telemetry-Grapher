@@ -12,7 +12,7 @@ class Import_Tab(QWidget):
         self.path_dict = {}
         self.dir = os.getcwd()
         self.auto_parse = True
-        self.path_kwargs = {}
+
 #        self.dir = r'C:\Users\seery\Documents\German (the person)\PHI_data_housekeeping\CSV'  # delete later, just for quicker access
 
 #        dirLabel = QLabel('Directory:')
@@ -46,7 +46,7 @@ class Import_Tab(QWidget):
         self.editGroup = QPushButton('Rename Group')
         self.editGroup.clicked.connect(self.rename_group)
         self.importSettings = QPushButton('Import Settings')
-        self.importSettings.clicked.connect(self.set_import_settings)
+        self.importSettings.clicked.connect(self.open_import_settings)
         self.importGroup = QPushButton('Import Group')
         self.importGroup.clicked.connect(self.import_group)
         self.deleteGroup = QPushButton('Delete Group')
@@ -134,9 +134,10 @@ class Import_Tab(QWidget):
         self.fileSearch.setText('')
         self.foundFiles.clear()
         self.foundFiles.addItems(self.loaded_files)
+        TG = self.parent.parent
         for file in self.path_dict:
-            if file not in self.path_kwargs:
-                self.path_kwargs[self.path_dict[file]] = {'header':'Auto', 'index_col':'Auto', 'skiprows':None}
+            if file not in TG.path_kwargs:
+                TG.path_kwargs[self.path_dict[file]] = {'header':'Auto', 'index_col':'Auto', 'skiprows':None}
 
     def browse_dialog(self):
         path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
@@ -186,7 +187,7 @@ class Import_Tab(QWidget):
         except IndexError:
             pass
 
-    def set_import_settings(self):
+    def open_import_settings(self):
         self.settingsDialog = Import_Settings(self)
         self.settingsDialog.setModal(True)
         self.settingsDialog.show()
@@ -254,7 +255,7 @@ class Import_Tab(QWidget):
 
                 # Get parse kwargs associated with file
                 kwargs = {}
-                parse_kwargs = self.path_kwargs[path]
+                parse_kwargs = TG.path_kwargs[path]
                 kwargs.update(parse_kwargs)
                 if path.endswith('xls') or path.endswith('xlsx'):
                     read_func = pd.read_excel
@@ -285,7 +286,7 @@ class Import_Tab(QWidget):
                     if 'source' not in locals(): source = path
                     DM.feedback('File "\{}\" threw an error: {}'.format(source, e))
                     return pd.DataFrame()
-
+                TG.path_kwargs[path].update(kwargs)
 
             DM.feedback('Done', mode='append')
             df = pd.concat(dflist, axis=0, sort=False)
@@ -294,6 +295,7 @@ class Import_Tab(QWidget):
 
         ### Beginning of actions
         DM = self.parent
+        TG = DM.parent
         group = self.groupName.text()
         loaded_groups = [self.importedGroups.item(i).text() for i in range(self.importedGroups.count())]
 

@@ -48,15 +48,29 @@ def gather_files_mod(path):
 # Turn this on to run all the scripts for the first time (harder to debug when it's on)
 # ie when the kernel dies. Again.
 
-if 0:
+if 1:
     path = r'P:\FigureWizard'
     script_paths = gather_files_mod(path)
     for script in script_paths:
         exec(open(script).read())
 
+df = pd.read_excel(r'P:\FigureWizard\DummyData.xlsx', index_col=0, header=0)
+start = '2018-12-06 00:00'
+end = '2018-12-06 02:05'  # dummy start/end from PHI_HK, default will be None
+subdf = df[(df.index >= start) & (df.index <= end)]
+#print(df)
+#print(subdf)
+
+
+
+groups = {'Test':Group(df, ['DummyData.xlsx'], [r'P:\FigureWizard\''])}
+units = ['mm', '°C', '°C', 'V']
+for i,header in enumerate(groups['Test'].series):
+    groups['Test'].series[header].unit = units[i]
+
 if 'app' not in locals():
     app = QCoreApplication.instance()
 if app is None:  # otherwise kernel dies
     app = QApplication(sys.argv)
-X = Telemetry_Grapher()#groups, data_dict)
+X = Telemetry_Grapher()#groups=groups)
 app.exec_()

@@ -8,7 +8,7 @@ class Telemetry_Grapher(QMainWindow):
     def __init__(self, groups={}):
         super().__init__()
         self.groups = copy.deepcopy(groups)
-
+        self.path_kwargs = {}
         self.unit_dict = {  # dictionary of supported units
                 'Position':['nm','μm','mm','cm','m'],
                 'Velocity':['mm/s','cm/s','m/s'],
@@ -61,12 +61,9 @@ class Telemetry_Grapher(QMainWindow):
                 '>',
             ]
 
-        self.start = '2018-12-06 00:00'
-        self.end = '2018-12-09 00:00'  # dummy start/end from PHI_HK, default will be None
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('satellite.png'))
         self.statusBar().showMessage('No subplot selected')
-        self.fig_preferences()
         self.manager = QWidget()
 
         self.docked_FS = QDockWidget("Figure Settings", self)
@@ -86,9 +83,10 @@ class Telemetry_Grapher(QMainWindow):
         self.docked_SF.setWidget(self.series_frame)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_SF)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_CF)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)  # Currently non-functional
+        self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)  # Currently under construction
         self.docked_FS.hide()
-
+        self.figure_settings.connect_widgets(container=self.axes_frame)
+        self.control_frame.time_filter()
 
         self.resizeDocks([self.docked_SF], [450], Qt.Horizontal)
 
@@ -103,7 +101,7 @@ class Telemetry_Grapher(QMainWindow):
         openAction.triggered.connect(self.open_fig)
         saveAction = QAction('Save', self)
         saveAction.setShortcut('Ctrl+S')
-        saveAction.triggered.connect(self.control_frame.save_figure)
+        saveAction.triggered.connect(self.save_figure)
         exitAction = QAction('Exit', self)
         exitAction.setShortcut('Ctrl+Q')
         exitAction.setStatusTip('Exit application')
@@ -122,7 +120,7 @@ class Telemetry_Grapher(QMainWindow):
         redoAction.triggered.connect(self.redo)
         refreshAction = QAction('Refresh Figure', self)
         refreshAction.setShortcut('Ctrl+R')
-        refreshAction.triggered.connect(self.refresh_all)
+        refreshAction.triggered.connect(self.axes_frame.refresh_all)
 #        resetAction = QAction('Undo', self)
 #        resetAction.setShortcut('Ctrl+Z')  # wrong
 #        resetAction.setStatusTip('Undo last action')  #wrong
@@ -141,7 +139,7 @@ class Telemetry_Grapher(QMainWindow):
         templateAction.triggered.connect(self.import_template)
         preferencesAction = QAction('Figure Preferences', self)
         preferencesAction.setShortcut('Ctrl+P')
-        preferencesAction.triggered.connect(self.fig_preferences)
+#        preferencesAction.triggered.connect(self.axes_frame.fig_preferences)
         toolsMenu.addAction(dataAction)
         toolsMenu.addAction(templateAction)
         toolsMenu.addAction(preferencesAction)
@@ -168,7 +166,39 @@ class Telemetry_Grapher(QMainWindow):
         self.control_frame.setFixedWidth(self.control_frame.width()) #(450 on my screen)
 
         ### Delete later, just for speed
-        self.open_data_manager()
+#        self.open_data_manager()
+
+    def groups_to_contents(self, groups):
+        contents = {}
+        for group in groups:
+            aliases = []
+            units = []
+            for header in groups[group].series.keys():
+                if groups[group].series[header].keep:
+                    alias = groups[group].series[header].alias
+                    if alias:
+                        aliases.append(alias)
+                    else:
+                        aliases.append(header)
+                    units.append(groups[group].series[header].unit)
+            contents.update({group: dict(zip(aliases, units))})
+        return contents
+
+    def save_figure(self):
+        ### Disconnected from button, but still should be connected to menubar action (TBI)
+        """Saves figure using PyQt5's file dialog. Default format is .jpg."""
+        AF = self.axes_frame
+        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
+        AF.draw()
+
+        ### ONLY JPG WORKS RIGHT NOW
+        dlg = QFileDialog()
+        dlg.setFileMode(QFileDialog.AnyFile)
+#        dlg.setConfirmOverwrite(True)
+        dlg_output = dlg.getSaveFileName(self, 'Save Figure', os.getcwd(), "JPEG Image (*.jpg);;PNG Image (*.png)")
+        plt.savefig(dlg_output[0], dpi=300, format='jpg', transparent=True, bbox_inches='tight')
+#        TG.statusBar().showMessage('Saved to {}'.format(fileName))
+
 
     # I could move this and the unit_dicts/clarify dictionaries to DM, and have it read/write from/to a .txt file
     # ^ No, I don't think you can. DM is a QDialog and all its information will be lost when it's closed.
@@ -207,32 +237,6 @@ class Telemetry_Grapher(QMainWindow):
 
     def import_template(self):
         pass
-
-    def fig_preferences(self):
-#        if self.start is None:
-#            startCondition = lambda index: index == True
-#        else:
-#            startCondition = lambda index: index >= self.start
-#        if self.end is None:
-#            endCondition = lambda index: index == True
-#        else:
-#            endCondition = lambda index: index <= self.end
-        if self.start is None: self.start = min([self.groups[name].data.index[0] for name in self.groups.keys()])
-        if self.end is None: self.end = max([self.groups[name].data.index[-1] for name in self.groups.keys()])
-        self.timespan = pd.to_datetime(self.end)-pd.to_datetime(self.start)
-        if self.timespan < dt.timedelta(days=1):
-            self.dotsize = 0.8
-        else:
-            self.dotsize = 0.5
-        if self.timespan >= dt.timedelta(days=2) and self.timespan < dt.timedelta(days=4):
-            self.dateformat = mdates.DateFormatter('%d/%b %H:%M')
-            self.major_locator = mdates.DayLocator()
-        elif self.timespan >= dt.timedelta(days=4):
-            self.dateformat = mdates.DateFormatter('%d/%b %H:%M')
-            self.major_locator = mdates.DayLocator()
-        else:
-            self.dateformat = mdates.DateFormatter('%d %b %Y %H:%M')
-            self.major_locator = mdates.HourLocator(interval=2)
 
     def toggle_docks(self):
         docks = [self.docked_CF, self.docked_SF, self.docked_FS]

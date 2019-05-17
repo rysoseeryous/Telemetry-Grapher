@@ -14,11 +14,29 @@ class Configure_Tab(QWidget):
         self.selectGroup = QComboBox()
         self.selectGroup.addItems(self.parent.groups.keys())
         self.selectGroup.currentIndexChanged.connect(self.display_header_info)
+        self.grid.addWidget(self.selectGroup,0,0)
+
         self.settings = QPushButton('Unit Settings')
         self.settings.clicked.connect(self.open_settings)
+        self.grid.addWidget(self.settings,1,0)
+
         self.hideRows = QCheckBox('Hide Unused Headers')
         self.hideRows.setChecked(True)
         self.hideRows.stateChanged.connect(self.display_header_info)
+        self.grid.addWidget(self.hideRows,2,0)
+
+        self.start = QLabel()
+        self.grid.addWidget(self.start,3,0)
+
+        self.end = QLabel()
+        self.grid.addWidget(self.end,4,0)
+
+        self.total_span = QLabel()
+        self.grid.addWidget(self.total_span,5,0)
+
+        self.sampling_rate = QLabel()
+        self.grid.addWidget(self.sampling_rate,6,0)
+
         self.headerTable = QTableWidget()
         self.headerTable.setColumnCount(6)
         self.headerTable.setHorizontalHeaderLabels(['Keep','Original Header','Alias','Unit Type','Unit','Scale'])
@@ -29,28 +47,32 @@ class Configure_Tab(QWidget):
         self.headerTable.horizontalHeader().setSectionResizeMode(4,QHeaderView.Fixed)
         self.headerTable.horizontalHeader().setSectionResizeMode(5,QHeaderView.ResizeToContents)
         self.headerTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.grid.addWidget(self.headerTable,0,1,8,1)
 
-        widgets = [
-                self.selectGroup,
-                self.settings,
-                self.hideRows,
-                self.headerTable,
-                ]
-
-        positions = [
-                (0,0,1,1),
-                (1,0,1,1),
-                (2,0,1,1),
-                (0,1,4,1),
-                ]
-
-        for w, p in zip(widgets, positions):
-            self.grid.addWidget(w, *p)
+        row_weights = [1, 1, 1, 1, 1, 1, 1, 100]
+        for i,rw in enumerate(row_weights):
+            self.grid.setRowStretch(i,rw)
+        col_weights = [1, 100]
+        for i,cw in enumerate(col_weights):
+            self.grid.setColumnStretch(i,cw)
         self.setLayout(self.grid)
 
         if self.selectGroup.currentText():
             self.display_header_info()
             self.parent.modified = False
+
+    def days_hours_minutes(self, timedelta):
+            return timedelta.days, timedelta.seconds//3600, (timedelta.seconds//60)%60
+
+    def df_span_info(self, df):
+        start = min(df.index)
+        end = max(df.index)
+        totalspan = self.days_hours_minutes(end - start)
+        timeinterval = 0; i = 1
+        while timeinterval == 0:
+            timeinterval = (df.index[i]-df.index[i-1]).total_seconds()
+            i += 1
+        return start, end, totalspan, timeinterval
 
     def display_header_info(self):
         try:
@@ -62,6 +84,13 @@ class Configure_Tab(QWidget):
         selected = self.selectGroup.currentText()
         if selected:
             group = DM.groups[selected]
+            df = group.data
+            start, end, total_span, sampling_rate = self.df_span_info(df)
+            self.start.setText('Data Start:\n    {}'.format(start.strftime('%Y-%m-%d  %H:%M:%S')))
+            self.end.setText('Data End:\n    {}'.format(end.strftime('%Y-%m-%d  %H:%M:%S')))
+            self.total_span.setText('Total Span:\n    {} days\n    {} hours\n    {} minutes'.format(*total_span))
+            self.sampling_rate.setText('Sampling Rate:\n    {}s'.format(sampling_rate))
+
             if self.hideRows.isChecked():
                 nKeep = 0
                 for header in group.series:
