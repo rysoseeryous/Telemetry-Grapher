@@ -1540,7 +1540,7 @@ class Import_Tab(QWidget):
                 return np.nan
 
         def parse_unit(header):
-            regex = re.compile('(\[|\()([a-z]|[A-Z])*(\]|\))')  # matches [letters] or (letters) anywhere in header
+            regex = re.compile('\[.*?\]')  # matches any characters between square brackets
             parsed = None
             for parsed in re.finditer(regex, header):  # parsed ends up as last match
                 pass
@@ -1562,14 +1562,15 @@ class Import_Tab(QWidget):
                 counter += 1
 
                 # Get parse kwargs associated with file
-                kwargs = {}
+                kwargs = {'encoding':'latin1'}  # just load the dang file
                 parse_kwargs = TG.path_kwargs[path]
                 kwargs.update(parse_kwargs)
                 if path.endswith('xls') or path.endswith('xlsx'):
                     read_func = pd.read_excel
                 elif path.endswith('csv') or path.endswith('zip'):
                     read_func = pd.read_csv
-                    kwargs.update({'encoding':'ISO-8859-1', 'sep':',', 'engine':'python'})
+#                    kwargs.update({'encoding':'ISO-8859-1', 'sep':',', 'engine':'python'})
+#                    kwargs.update({'encoding':'utf-8-sig', 'sep':',', 'engine':'python'})
 
                 # Take header_row and index_col as intersecting cell above first parseable datetime
                 warnings.filterwarnings('ignore')  # to ignore UserWarning: Discarding nonzero nanoseconds in conversion
@@ -1592,7 +1593,7 @@ class Import_Tab(QWidget):
                     for file in self.path_dict:
                         if self.path_dict[file] == path: source = file
                     if 'source' not in locals(): source = path
-                    DM.feedback('File "\{}\" threw an error: {}'.format(source, e))
+                    DM.feedback('File "\{}\" threw an error: {}'.format(source[1:], e))
                     return pd.DataFrame()
                 TG.path_kwargs[path].update(kwargs)
 
