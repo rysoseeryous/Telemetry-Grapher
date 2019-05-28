@@ -10,12 +10,14 @@ import csv
 import os
 import re
 import copy
-import warnings
+#import warnings
 import datetime as dt
-
 import itertools
 import math
 import functools
+
+import xlrd
+import unicodecsv
 
 #from PyQt5.QtWidgets import QMainWindow, QAction, QDockWidget, QWidget, QVBoxLayout, QApplication, QDesktopWidget, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QDialog, QTabWidget
 from PyQt5.QtWidgets import *
@@ -35,6 +37,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 
 class Telemetry_Grapher(QMainWindow):
+    """Main application window."""
 
     def __init__(self, groups={}):
         super().__init__()
@@ -44,15 +47,15 @@ class Telemetry_Grapher(QMainWindow):
         self.path_kwargs = {}
         self.auto_parse = True
 
-
-        self.unit_dict = {  # dictionary of supported units
+        # dictionary of supported unit types
+        self.unit_dict = {
                 'Position':['nm','μm','mm','cm','m'],
                 'Velocity':['mm/s','cm/s','m/s'],
                 'Acceleration':['mm/s^2','m/s^2'],  # check how superscripts are parsed
                 'Angle':['deg','rad'],
                 'Temperature':['°C','°F','K'],
                 'Pressure':['mPa','Pa','kPa','MPa','GPa','mbar','bar','kbar','atm','psi','ksi'],
-                'Heat':['mJ','J','kJ'],
+                'Energy':['mJ','J','kJ'],
                 'Voltage':['mV','V','kV','MV'],
                 'Current':['mA','A','kA'],
                 'Resistance':['mΩ','Ω','kΩ','MΩ'],
@@ -60,28 +63,26 @@ class Telemetry_Grapher(QMainWindow):
                 'Torque':['Nmm','Nm','kNm'],
                 'Power':['mW','W','kW'],
                 }
-        self.user_units = {}
-        self.default_type = None
-        self.default_unit = None
-
-        self.unit_clarify = {  # try to map parsed unit through this dict before comparing to TG unit_dict
+        # try to map parsed unit through this dict before comparing to TG unit_dict
+        self.unit_clarify = {
                 'degC':'°C',
                 'degF':'°F',
                 'C':'°C',
                 'F':'°F',
                 }
+        self.user_units = {}
+        self.default_type = None
+        self.default_unit = None
 
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('satellite.png'))
         self.statusBar().showMessage('No subplot selected')
-
         self.manager = QWidget()
 
         self.docked_FS = QDockWidget("Figure Settings", self)
         self.docked_FS.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
         self.figure_settings = Figure_Settings(self)
         self.docked_FS.setWidget(self.figure_settings)
-
         self.docked_CF = QDockWidget("Control Frame", self)
         self.control_frame = Control_Frame(self)
         self.docked_CF.setWidget(self.control_frame)
@@ -95,12 +96,11 @@ class Telemetry_Grapher(QMainWindow):
         self.docked_SF.setWidget(self.series_frame)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_SF)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.docked_CF)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)  # Currently under construction
+        self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)
         self.docked_FS.hide()
         self.figure_settings.connect_widgets(container=self.axes_frame)
         self.control_frame.time_filter()
         self.filename = self.axes_frame.fig._suptitle.get_text()
-
         self.resizeDocks([self.docked_SF], [437], Qt.Horizontal)
 
         fileMenu = self.menuBar().addMenu('File')
@@ -165,11 +165,6 @@ class Telemetry_Grapher(QMainWindow):
         templateAction.triggered.connect(self.import_template)
         toolsMenu.addAction(templateAction)
 
-        preferencesAction = QAction('Figure Preferences', self)
-        preferencesAction.setShortcut('Ctrl+P')
-#        preferencesAction.triggered.connect(self.axes_frame.fig_preferences)
-        toolsMenu.addAction(preferencesAction)
-
         viewMenu = self.menuBar().addMenu('View')
         docksAction = QAction('Show/Hide Docks', self)
         docksAction.setShortcut('Ctrl+H')
@@ -198,6 +193,7 @@ class Telemetry_Grapher(QMainWindow):
         self.open_data_manager()
 
     def groups_to_contents(self, groups):
+        """Converts groups database into contents format. See ReadMe."""
         contents = {}
         for group in groups:
             aliases = []
@@ -214,13 +210,14 @@ class Telemetry_Grapher(QMainWindow):
         return contents
 
     def save(self):
+        """Quick-save feature.
+        Saves current figure to most recent save directory if a file by that name already exists, else defers to explicit Save-As dialog.
+        Accessible by Telemetry Grapher's File menu (or Ctrl+S)."""
         self.control_frame.rename()
         AF = self.axes_frame
         AF.current_sps = []
         for group in self.groups.values(): group.density = 100
         AF.refresh_all()
-#        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
-#        AF.draw()
 
         filename = self.filename + self.default_ext
         if filename in os.listdir(self.save_dir):
@@ -232,19 +229,18 @@ class Telemetry_Grapher(QMainWindow):
             self.save_as()
 
     def save_as(self):
-        """Saves figure using PyQt5's file dialog. Default format is .jpg."""
+        """Explicit Save-As feature.
+        Saves current figure using PyQt5's file dialog. Default format is .jpg.
+        Accessible by Telemetry Grapher's File menu (or Ctrl+Shift+S)."""
         self.control_frame.rename()
         AF = self.axes_frame
         AF.current_sps = []
         for group in self.groups.values(): group.density = 100
         AF.refresh_all()
-#        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
-#        AF.draw()
 
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.AnyFile)
         dlg.setViewMode(QFileDialog.Detail)
-
         dlg_output = dlg.getSaveFileName(self,
                                          'Save Figure',
                                          self.save_dir + '/' + self.filename,
@@ -254,16 +250,14 @@ class Telemetry_Grapher(QMainWindow):
             self.save_dir = savepath[:savepath.rindex('/')]  # store saving directory
             self.default_ext = savepath[savepath.index('.'):]  # store file extension
             plt.savefig(savepath, dpi=300, transparent=True, bbox_inches='tight')
-
 #            with open(self.filename + '.pickle', 'wb') as f:
 #                pkl.dump(AF.fig, f)
-
             self.statusBar().showMessage('Saved to {}'.format(savepath))
 
-    # I could move this and the unit_dicts/clarify dictionaries to DM, and have it read/write from/to a .txt file
-    # ^ No, I don't think you can. DM is a QDialog and all its information will be lost when it's closed.
     def get_unit_type(self, unit):
-        """This is a quasi-parsing function"""
+        """Returns unit type of given unit.
+        Priority is first given to user-defined units, then base unit types.
+        If unit is not recognized in either dictionary, the default unit type is returned."""
         # check user units first
         for e in self.user_units:
             if unit in self.user_units[e]:
@@ -319,6 +313,8 @@ class Telemetry_Grapher(QMainWindow):
         pass
 
     def open_data_manager(self):
+        """Opens Data Manager dialog.
+        Accessible through Telemetry Grapher's Tools menu (or Ctrl+D)."""
         self.manager = Data_Manager(self)
         self.manager.setModal(True)
         self.manager.show()
@@ -327,6 +323,8 @@ class Telemetry_Grapher(QMainWindow):
         pass
 
     def toggle_docks(self):
+        """Toggles visibility of dock widgets.
+        Accessible through Telemetry Grapher's View menu (or Ctrl+H)."""
         docks = [self.docked_CF, self.docked_SF, self.docked_FS]
         if any([not dock.isVisible() for dock in docks]):
             for dock in docks: dock.show()
@@ -347,7 +345,7 @@ class Telemetry_Grapher(QMainWindow):
 
 
 class Axes_Frame(FigureCanvas):
-    """Container for figure with subplots. New Axes_Frame objects are created and when a new Figure tab is created (TBI)."""
+    """Central widget in Telemetry Grapher main window."""
 
     def __init__(self, parent):
         self.parent = parent
@@ -371,7 +369,11 @@ class Axes_Frame(FigureCanvas):
         self.draw()
 
     def refresh_all(self):
-        """Refresh entire figure. To be called by TG menubar action and whenever figure_settings/kwargs is updated."""
+        """Refreshes entire figure.
+        Called when:
+            - Any value in Figure Settings is updated
+            - Subplots are modified in any way
+            - User manually calls it via Telemetry Grapher's Edit menu (Ctrl+R)"""
         TG = self.parent
         FS = TG.figure_settings
         CF = TG.control_frame
@@ -379,7 +381,6 @@ class Axes_Frame(FigureCanvas):
         for ax in self.fig.axes: ax.remove()
 
         n = max([len(sp.axes[2:]) for sp in self.subplots])
-
         # If any subplot has a legend, treat it like another secondary axis
         for sp in self.subplots:
             if sp.legend and sp.contents:
@@ -446,18 +447,11 @@ class Axes_Frame(FigureCanvas):
                 highlight(self.subplots, invert=True)
                 self.current_sps = []
             else:
-#                print('event.inaxes:\t', event.inaxes)
-#                print('fig.axes:\t', self.fig.axes)
-#                print('subplot hosts:\t', [sp.host() for sp in self.subplots])
-#                print(event.inaxes.get_yticks())
-
                 #find out which Subplot_Manager contains event-selected axes
                 for sm in self.subplots:
                     if event.inaxes in sm.axes:
                         sp = sm
                         break
-#                print(sp)
-#                sp = self.subplots[[sp.host() for sp in self.subplots].index(event.inaxes)]
                 if modifiers == Qt.ControlModifier:
                     highlight([sp], invert=(sp in self.current_sps))
                 elif modifiers == Qt.ShiftModifier:
@@ -496,7 +490,7 @@ class Axes_Frame(FigureCanvas):
 
 
 class Control_Frame(QWidget):
-    """Contains all buttons for controlling the organization of subplots and saving the figure."""
+    """Contains all buttons for controlling subplot organization."""
 
     def __init__(self, parent):
         super().__init__()
@@ -585,6 +579,7 @@ class Control_Frame(QWidget):
         self.setLayout(grid)
 
     def cleanup_axes(self):
+        """Manages axes ticks, tick labels, and gridlines for the whole figure."""
         TG = self.parent
         AF = TG.axes_frame
         FS = TG.figure_settings
@@ -614,6 +609,7 @@ class Control_Frame(QWidget):
                 self.toggle_grid(sp)
 
     def toggle_grid(self, sp):
+        """Controls whether X/Y, major/minor gridlines are displayed in subplot sp."""
         TG = self.parent
         FS = TG.figure_settings
         linestyles = ['-', '--', ':', '-.']
@@ -634,6 +630,7 @@ class Control_Frame(QWidget):
                 ax.yaxis.grid(b=True, which='minor', linestyle=linestyles[i%len(linestyles)])
 
     def cap_start_end(self):
+        """Limits the figure start and end datetimes by the extent of the loaded data."""
         TG = self.parent
         try:
             data_start = min([TG.groups[name].data.index[0] for name in TG.groups.keys()])
@@ -659,6 +656,7 @@ class Control_Frame(QWidget):
         self.selectEnd.setDateTime(self.selectEnd.maximumDateTime())
 
     def time_filter(self):
+        """Determines timestamp format and major/minor x-axis locators based on the plotted timespan."""
         TG = self.parent
         AF = TG.axes_frame
         self.start = self.selectStart.dateTime().toPyDateTime()
@@ -686,7 +684,7 @@ class Control_Frame(QWidget):
         AF.refresh_all()
 
     def reorder(self, sps, direction):
-        """Reorders selected subplot up or down and updates weighting field."""
+        """Reorders selected subplot up or down."""
         TG = self.parent
         AF = TG.axes_frame
         FS = TG.figure_settings
@@ -701,12 +699,13 @@ class Control_Frame(QWidget):
             if 0 <= j < len(AF.subplots):  # do nothing if moving sp up or down would put it past the first/last index
                 AF.weights[i], AF.weights[j] = AF.weights[j], AF.weights[i]
                 AF.subplots[i], AF.subplots[j] = AF.subplots[j], AF.subplots[i]
+                AF.current_sps = [AF.subplots[i]]
                 AF.refresh_all()
         else:
             TG.statusBar().showMessage('Select one subplot to reorder')
 
     def insert_subplot(self, sps):
-        """Inserts subplot at top of figure. (Indexed insertion not working)"""
+        """Inserts blank subplot below selected subplot."""
         TG = self.parent
         AF = TG.axes_frame
 
@@ -764,7 +763,7 @@ class Control_Frame(QWidget):
             TG.statusBar().showMessage('Select one or more subplots to clear')
 
     def toggle_legend(self, sps):
-        """Toggles legend display of selected subplot."""
+        """Toggles legend display of selected subplot(s)."""
         TG = self.parent
         if sps:
             AF = TG.axes_frame
@@ -781,7 +780,7 @@ class Control_Frame(QWidget):
             TG.statusBar().showMessage('Select one or more subplots to toggle legend')
 
     def color_coordinate(self, sps):
-        """Recolors lines and axes in selected subplot to correspond by unit type."""
+        """Coordinates color of lines and axis labels in selected subplot(s) by unit type."""
         TG = self.parent
         if sps:
             AF = TG.axes_frame
@@ -799,7 +798,7 @@ class Control_Frame(QWidget):
             TG.statusBar().showMessage('Select one or more subplots to toggle color coordination')
 
     def cycle_subplot(self, sps):
-        """Cycles through unit order permutations."""
+        """Cycles through unit order permutations of selected subplot(s)."""
         TG = self.parent
         if sps:
             AF = TG.axes_frame
@@ -812,7 +811,7 @@ class Control_Frame(QWidget):
             TG.statusBar().showMessage('Select one or more subplots to cycle unit plotting order')
 
     def adjust_weights(self):
-        """Adjusts subplot vertical aspect ratios based on provided list of weights (or sequence of digits)."""
+        """Adjusts subplot vertical aspect ratios based on provided list of weights or sequence of digits."""
         TG = self.parent
         AF = TG.axes_frame
         weights = []
@@ -846,12 +845,13 @@ class Control_Frame(QWidget):
 
 
 class Series_Frame(QWidget):
-    """Manages imported data. Shows hierarchically the series (with assigned units) available to plot and the series plotted in the selected subplot(s)."""
+    """Displays hierarchical string references to imported data groups/aliases.
+    Available tree shows series which have not yet been plotted.
+    Plotted tree shows contents of selected subplot."""
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-#         self.resize(300,parent.height)
         grid = QGridLayout()
         w = QWidget()
         ncols = 2
@@ -889,7 +889,7 @@ class Series_Frame(QWidget):
         self.available.resizeColumnToContents(0)
 
     def cleanup(self):
-        """Sorts both trees and deletes any dataframe references that contain no series."""
+        """Sorts both trees and deletes any group references that contain no series."""
         for tree in [self.available, self.plotted]:
             tree.sortItems(0,0)  # sort by column 0 in ascending order
             to_delete = []
@@ -916,6 +916,7 @@ class Series_Frame(QWidget):
 #        return contents
 
     def add_to_contents(self, contents, to_add):
+        """Returns contents dictionary extended by items in to_add."""
         for group, headers_units in to_add.items():
             if group in contents:
                 for header, unit in headers_units.items():
@@ -932,6 +933,7 @@ class Series_Frame(QWidget):
 #        return contents
 
     def remove_from_contents(self, contents, to_remove):
+        """Returns contents dictionary without items in to_remove."""
         for group, headers_units in to_remove.items():
             if group in contents:
                 for header, unit in headers_units.items():
@@ -996,7 +998,7 @@ class Series_Frame(QWidget):
         # Probably takes a lot of memory
 
     def transfer(self, caller):
-        """Swaps series or entire dataframe references from available to plotted or vice versa."""
+        """Swaps series or entire group references from available to plotted or vice versa."""
         TG = self.parent
         AF = TG.axes_frame
         selected_sps = AF.current_sps
@@ -1056,6 +1058,7 @@ class Series_Frame(QWidget):
                 TG.statusBar().showMessage('No series selected')
 
     def get_sp_contents(self):
+        """Returns contents of selected subplot if exactly one is selected, otherwise returns an empty dictionary."""
         TG = self.parent
         AF = TG.axes_frame
         if len(AF.current_sps) == 1:
@@ -1065,7 +1068,7 @@ class Series_Frame(QWidget):
         return contents
 
     def search(self, search_bar, tree, data_set):
-        """Displays only series in tree which match input to search_bar (case insensitive)"""
+        """Displays series in tree which match input to search_bar (case insensitive)"""
         user_input = re.compile(search_bar.text(), re.IGNORECASE)
         matches = {}
         if data_set:
@@ -1090,6 +1093,7 @@ class Series_Frame(QWidget):
 
 
 class QColorButton(QPushButton):
+    """Associates unit type with color."""
 
     def __init__(self, parent, color, unit_type):
         super(QColorButton, self).__init__()
@@ -1101,13 +1105,14 @@ class QColorButton(QPushButton):
 
 
 class Figure_Settings(QWidget):
+    """Contains options for controlling figure size and appearance."""
 
     def __init__(self, parent, saved=None):
         super().__init__()
         self.parent = parent
         TG = self.parent
 
-        mpl.rc('font', family='serif')  # controlable later maybe
+        mpl.rc('font', family='serif')  # controllable later maybe
         self.markers = [  # when color coordination is on, use markers in this order to differentiate series
                 'o',
                 '+',
@@ -1225,15 +1230,15 @@ class Figure_Settings(QWidget):
         self.unit_table.verticalHeader().setDefaultSectionSize(self.unit_table.verticalHeader().minimumSectionSize())
         self.unit_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.unit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
         vbox.addWidget(self.unit_table)
         self.setLayout(vbox)
 
         self.dlg = QColorDialog()
-        self.color_dict = {None:'k','':'k'}
+        self.color_dict = {None:'k', '':'k'}
         self.update_unit_table()
 
     def update_unit_table(self):
+        """Updates table associating unit types with colors."""
         TG = self.parent
         all_units = {**TG.unit_dict, **TG.user_units}
         self.unit_table.setRowCount(len(all_units))
@@ -1254,6 +1259,8 @@ class Figure_Settings(QWidget):
             self.unit_table.setCellWidget(i, 1, _widget)
 
     def connect_widgets(self, container):
+        """Connects widgets to refresh_all() in Axes Frame.
+        Called by Telemetry Grapher after Axes Frame has been instantiated."""
         widgets = [
                 self.upperPad,
                 self.lowerPad,
@@ -1282,6 +1289,7 @@ class Figure_Settings(QWidget):
             w.toggled.connect(container.refresh_all)
 
     def pick_color(self):
+        """Opens a color picker dialog and assigns it to the associated unit type."""
         colorButton = QObject.sender(self)
         unit_type = colorButton.unit_type
         if colorButton.color:
@@ -1297,6 +1305,7 @@ class Figure_Settings(QWidget):
 
 
 class Data_Manager(QDialog):
+    """Manages the importing of data and configuration of data groups."""
 
     def __init__(self, parent):
         super().__init__()
@@ -1379,11 +1388,12 @@ class Data_Manager(QDialog):
         self.messageLog.verticalScrollBar().setValue(self.messageLog.verticalScrollBar().maximum())
 
     def save_changes(self):
+        """Saves groups created in Data Manager dialog to Telemetry Grapher main window.
+        Maps existing data to new data within subplots and in available tree, saving the user the trouble of repopulating the subplots every time a change is made."""
         if self.modified:
             TG = self.parent
             SF = TG.series_frame
             CF = TG.control_frame
-            ### Eventually, loop this through all open axes frames (excel tab implementation)
             AF = TG.axes_frame
 
             # Get new alias/unit information from self.groups
@@ -1407,11 +1417,11 @@ class Data_Manager(QDialog):
                                 header = alias
                             if header in new_series and new_series[header].keep:
                                 new_alias = new_series[header].alias
-                                if not new_alias: new_alias = header
+                                if not new_alias:
+                                    unit = new_series[header].unit
+                                    new_alias = re.sub('\[{}\]'.format(unit), '', header).strip()
                                 sp.contents[group_name][new_alias] = new_series[header].unit
-
                                 del new_contents[new_name][new_alias]
-
                             if not new_contents[new_name]: del new_contents[new_name]
 
                         transfer = sp.contents[group_name] # transfer contents from old to new
@@ -1419,15 +1429,11 @@ class Data_Manager(QDialog):
                         sp.contents[new_name] = transfer  # transfer variable because if you do a 1:1 assignment it will get deleted right away if the group wasn't renamed!
                     else:
                         del sp.contents[group_name] # scrap it because it doesn't exist in new_contents
-
                 SF.update_subplot_contents(sp, sp.contents)  # hopefully will take care of the ghost unit problem
             TG.groups = self.groups
-
             CF.time_filter()  # calls AF.refresh_all()
-
             #reset group_reassign
             self.group_reassign = {name:[name] for name in self.groups}
-
             # Dump everything else into AF.available_data
             AF.available_data = new_contents
             SF.available.clear()
@@ -1441,6 +1447,7 @@ class Data_Manager(QDialog):
             self.modified = False
 
     def closeEvent(self, event):
+        """Asks user to confirm exit if changes have been made and not saved."""
         if self.modified:
             if self.popup('Discard changes?', title='Exiting Data Manager') == QMessageBox.Cancel:
                 event.ignore()
@@ -1453,6 +1460,7 @@ class Data_Manager(QDialog):
 
 
 class Groups_Tab(QWidget):
+    """Allows the user to organize source files into groups and import them as compiled DataFrames."""
 
     def __init__(self, parent):
         super().__init__()
@@ -1464,17 +1472,14 @@ class Groups_Tab(QWidget):
         self.dir = os.getcwd()
 
         vbox = QVBoxLayout()
-
         hbox = QHBoxLayout()
         self.browse = QPushButton()
         self.browse.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_DialogOpenButton')))
         self.browse.clicked.connect(self.browse_dialog)
         hbox.addWidget(self.browse)
-
         self.directory = QLineEdit(self.dir)
         self.directory.returnPressed.connect(self.search_dir)
         hbox.addWidget(self.directory)
-
         vbox.addLayout(hbox)
 
         grid = QGridLayout()
@@ -1530,10 +1535,11 @@ class Groups_Tab(QWidget):
         grid.addWidget(self.deleteGroup, 3, 2)
 
         vbox.addLayout(grid)
-
         self.setLayout(vbox)
 
     def search_dir(self):
+        """Searches current directory and displays found files.
+        Newly found files are given an entry with default values in a dictionary associating filepaths and reading kwargs."""
         DM = self.parent
         TG = DM.parent
         path = self.directory.text()
@@ -1549,6 +1555,7 @@ class Groups_Tab(QWidget):
         self.foundFiles.addItems(self.loaded_files)
 
     def browse_dialog(self):
+        """Opens a file dialog to select a working directory and displays found files."""
         path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
         if path:
             self.directory.setText(path)
@@ -1570,13 +1577,15 @@ class Groups_Tab(QWidget):
         return found_files, path_dict
 
     def filter_files(self):
+        """Displays files in found files list which match searchbar input."""
         DM = self.parent
         pattern = re.compile(self.fileSearch.text(), re.IGNORECASE)
-        matches = [item for item in DM.import_tab.loaded_files if re.search(pattern,item)]
+        matches = [item for item in DM.groups_tab.loaded_files if re.search(pattern,item)]
         self.foundFiles.clear()
         self.foundFiles.addItems(matches)
 
     def toggle_file_active(self, caller):
+        """Transfers file to or from group file list."""
         DM = self.parent
         if caller == 'Add':
             for file in self.foundFiles.selectedItems():
@@ -1589,9 +1598,11 @@ class Groups_Tab(QWidget):
                 self.groupFiles.takeItem(self.groupFiles.row(file))
 
     def rename_group(self, item):
+        """Renames imported group.
+        Keeps track of past renaming operations so Data Manager's save changes can identify existing groups as having been renamed.
+        Accessible by double clicking on an imported group."""
         DM = self.parent
         try:
-#            item = self.importedGroups.selectedItems()[0]
             group_name = item.text()
             new_name, ok = QInputDialog.getText(self, 'Rename Group \"{}\"'.format(group_name), 'New group name:', QLineEdit.Normal, group_name)
             if ok and new_name != group_name:
@@ -1601,7 +1612,6 @@ class Groups_Tab(QWidget):
                     # Create new entry in DM.groups with new_name, give it old group's info, scrap the old one
                     DM.groups[new_name] = DM.groups[group_name]
                     del DM.groups[group_name]
-
                     # Append new name list of renames
                     # DM.group_reassign looks like {TG name: [TG name, rename1, rename2... DM name]}
                     for name in DM.group_reassign:
@@ -1621,7 +1631,10 @@ class Groups_Tab(QWidget):
             print(e)
 
     def parse_df_origin(self, path, read_func, nrows=20):
-        """Searches through first 20 rows for the first datetime and returns the cell above it as label origin."""
+        """Tries to identify the cell at which the header row and index column intersect.
+        - Loop through the first 20 rows of each column.
+        - If cell can be parsed as a datetime, return coordinates of cell directly above.
+        - If no cells can be parsed, return Nones."""
         n = 1
         while n <= nrows:  # avoid asking for more rows than there are
             try:
@@ -1646,6 +1659,11 @@ class Groups_Tab(QWidget):
         return None, None
 
     def parse_unit(self, header):
+        """Tries to parse unit from column header.
+        - Find last instance of one or more characters between square brackets -> unit.
+        - Run unit through TG.unit_clarify dictionary.
+        - Check if unit can be associated with a unit type (see TG.get_unit_type).
+        - If so, return unit, otherwise return default unit."""
         DM = self.parent
         TG = DM.parent
         regex = re.compile('\[.+?\]')  # matches any characters between square brackets (but not empty [])
@@ -1661,7 +1679,11 @@ class Groups_Tab(QWidget):
         return TG.default_unit
 
     def floatify(self, data):
-        """Strip everything but numbers, minus signs, and decimals, and returns data as a float. Returns NaN if not possible. Try to convert booleans to 1/0."""
+        """Strips data down to float.
+        - Try to return data as float.
+        - If not possible, try to interpret data as quasi-boolean and return 1.0 or 0.0.
+        - If not quasi-boolean, scrub away everything but numbers, minus signs, and decimals and return as float.
+        - Return NaN if all other attempts fail."""
         try:
             return float(data)  # try returning data as float as-is. Should speed things up.
         except (ValueError, TypeError):
@@ -1730,8 +1752,8 @@ class Groups_Tab(QWidget):
 
                 dflist.append(data)
             except ValueError as e:
-                for file in DM.import_tab.path_dict:
-                    if DM.import_tab.path_dict[file] == path: source = file
+                for file in DM.groups_tab.path_dict:
+                    if DM.groups_tab.path_dict[file] == path: source = file
                 if 'source' not in locals(): source = path
                 DM.feedback('File "\{}\" threw an error: {}'.format(source[1:], e))
                 return pd.DataFrame()
@@ -1805,6 +1827,10 @@ class Groups_Tab(QWidget):
                 group.series[header].unit_type = TG.get_unit_type(parsed)
                 if parsed is None:
                     report += header + '\n'
+                else:
+                    alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
+                    group.series[header].alias = alias
+                    group.alias_dict[alias] = header
             if update:
                 DM.configure_tab.populate_headerTable(group)
         if report:
@@ -1893,7 +1919,7 @@ class Import_Settings(QDialog):
         for i, file in enumerate(self.group_files):
             kwargs = TG.path_kwargs[GT.path_dict[file]]
             self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
-            self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
+            self.kwargTable.item(i, 0).setFlags(Qt.ItemIsSelectable)
             self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['format'])))
             self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['header'])))
             self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['index_col'])))
@@ -1918,9 +1944,7 @@ class Import_Settings(QDialog):
                 shown_df = upper_df.append(ellipses).append(lower_df)
             else:
                 shown_df = read_func(path, header=None, encoding='latin1')
-
             r, c = GT.parse_df_origin(path, read_func)
-
             GT.shown_dfs[path] = (shown_df, r, c)
 
     def reset(self):
@@ -2177,17 +2201,23 @@ class Configure_Tab(QWidget):
                 if group.series[header].keep:
                     alias = group.series[header].alias
                     unit = group.series[header].unit
-                    if not alias: alias = header
+                    if not alias:
+                        alias = re.sub('\[{}\]'.format(unit), '', header).strip()
                     aliases[header] = ('{} [{}]'.format(alias, unit))
             df = group.data.loc[:, list(aliases.keys())]
             df.rename(columns=aliases, inplace=True)
 
-            filename = savepath + '/' + group_name + '.xlsx'
-            with pd.ExcelWriter(filename) as writer:
-                df.to_excel(writer)
-                DM.feedback('Exporting DataFrame to {}... '.format(savepath))
-                DM.messageLog.repaint()
-            DM.feedback('Done', mode='append')
+            filename = savepath + '/' + group_name + '.csv'
+#            with pd.ExcelWriter(filename) as writer:
+#                df.to_excel(writer)
+            DM.feedback('Exporting DataFrame to {}... '.format(savepath))
+            DM.messageLog.repaint()
+            try:
+                with open(filename, 'w') as f:
+                    df.to_csv(f, encoding='utf-8-sig')
+                DM.feedback('Done', mode='append')
+            except PermissionError:
+                DM.feedback('Permission denied. File {} is already open or is read-only.'.format(group_name + '.csv'))
 
     def sync_scroll(self, idx):
         self.headerTable.horizontalScrollBar().setValue(idx)
@@ -2295,7 +2325,7 @@ class Configure_Tab(QWidget):
     def summarize_data(self, df):
         shape, start, end, total_span, sampling_rate = self.df_span_info(df)
         self.summary.setText("""
-Shape:
+Full Shape:
     {} rows
     {} columns
 
