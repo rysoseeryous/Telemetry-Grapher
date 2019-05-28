@@ -35,10 +35,16 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 
 class Telemetry_Grapher(QMainWindow):
+
     def __init__(self, groups={}):
         super().__init__()
         self.groups = copy.deepcopy(groups)
+        self.save_dir = os.getcwd()
+        self.default_ext = '.jpg'
         self.path_kwargs = {}
+        self.auto_parse = True
+
+
         self.unit_dict = {  # dictionary of supported units
                 'Position':['nm','μm','mm','cm','m'],
                 'Velocity':['mm/s','cm/s','m/s'],
@@ -54,6 +60,9 @@ class Telemetry_Grapher(QMainWindow):
                 'Torque':['Nmm','Nm','kNm'],
                 'Power':['mW','W','kW'],
                 }
+        self.user_units = {}
+        self.default_type = None
+        self.default_unit = None
 
         self.unit_clarify = {  # try to map parsed unit through this dict before comparing to TG unit_dict
                 'degC':'°C',
@@ -62,41 +71,14 @@ class Telemetry_Grapher(QMainWindow):
                 'F':'°F',
                 }
 
-        self.color_dict = {
-                'Position':'C0',
-                'Velocity':'C1',
-                'Acceleration':'C2',
-                'Angle':'C3',
-                'Temperature':'C4',
-                'Pressure':'C5',
-                'Heat':'C6',
-                'Voltage':'C7',
-                'Current':'C8',
-                'Resistance':'C9',
-                'Force':'b',
-                'Torque':'g',
-                'Power':'r',
-                None:'k'
-                }
-
-        self.markers = [  # when color coordination is on, use markers in this order to differentiate series
-                'o',
-                '+',
-                'x',
-                'D',
-                's',
-                '^',
-                'v',
-                '<',
-                '>',
-            ]
-
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('satellite.png'))
         self.statusBar().showMessage('No subplot selected')
+
         self.manager = QWidget()
 
         self.docked_FS = QDockWidget("Figure Settings", self)
+        self.docked_FS.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
         self.figure_settings = Figure_Settings(self)
         self.docked_FS.setWidget(self.figure_settings)
 
@@ -117,86 +99,103 @@ class Telemetry_Grapher(QMainWindow):
         self.docked_FS.hide()
         self.figure_settings.connect_widgets(container=self.axes_frame)
         self.control_frame.time_filter()
+        self.filename = self.axes_frame.fig._suptitle.get_text()
 
-        self.resizeDocks([self.docked_SF], [450], Qt.Horizontal)
+        self.resizeDocks([self.docked_SF], [437], Qt.Horizontal)
 
         fileMenu = self.menuBar().addMenu('File')
         newAction = QAction('New', self)
         newAction.setShortcut('Ctrl+N')
         newAction.setStatusTip('Open a blank figure')
         newAction.triggered.connect(self.new)
+        fileMenu.addAction(newAction)
+
         openAction = QAction('Open', self)
         openAction.setShortcut('Ctrl+O')
         openAction.setStatusTip('Open existing figure')
         openAction.triggered.connect(self.open_fig)
+        fileMenu.addAction(openAction)
+
         saveAction = QAction('Save', self)
         saveAction.setShortcut('Ctrl+S')
-        saveAction.triggered.connect(self.save_figure)
+        saveAction.triggered.connect(self.save)
+        fileMenu.addAction(saveAction)
+
+        saveAction = QAction('Save As', self)
+        saveAction.setShortcut('Ctrl+Shift+S')
+        saveAction.triggered.connect(self.save_as)
+        fileMenu.addAction(saveAction)
+
         exitAction = QAction('Exit', self)
         exitAction.setShortcut('Ctrl+Q')
         exitAction.setStatusTip('Exit application')
         exitAction.triggered.connect(self.close)
-        fileMenu.addAction(newAction)
-        fileMenu.addAction(openAction)
-        fileMenu.addAction(saveAction)
         fileMenu.addAction(exitAction)
 
         editMenu = self.menuBar().addMenu('Edit')
         undoAction = QAction('Undo', self)
         undoAction.setShortcut('Ctrl+Z')
         undoAction.triggered.connect(self.undo)
+        editMenu.addAction(undoAction)
+
         redoAction = QAction('Redo', self)
         redoAction.setShortcut('Ctrl+Y')
         redoAction.triggered.connect(self.redo)
+        editMenu.addAction(redoAction)
+
         refreshAction = QAction('Refresh Figure', self)
         refreshAction.setShortcut('Ctrl+R')
         refreshAction.triggered.connect(self.axes_frame.refresh_all)
+        editMenu.addAction(refreshAction)
+
 #        resetAction = QAction('Undo', self)
 #        resetAction.setShortcut('Ctrl+Z')  # wrong
 #        resetAction.setStatusTip('Undo last action')  #wrong
 #        resetAction.triggered.connect(self.undo)  #wrong
-        editMenu.addAction(undoAction)
-        editMenu.addAction(redoAction)
-        editMenu.addAction(refreshAction)
 #        editMenu.addAction(resetAction)
 
         toolsMenu = self.menuBar().addMenu('Tools')
         dataAction = QAction('Manage Data', self)
         dataAction.setShortcut('Ctrl+D')
         dataAction.triggered.connect(self.open_data_manager)
+        toolsMenu.addAction(dataAction)
+
         templateAction = QAction('Import Template', self)
         templateAction.setShortcut('Ctrl+T')
         templateAction.triggered.connect(self.import_template)
+        toolsMenu.addAction(templateAction)
+
         preferencesAction = QAction('Figure Preferences', self)
         preferencesAction.setShortcut('Ctrl+P')
 #        preferencesAction.triggered.connect(self.axes_frame.fig_preferences)
-        toolsMenu.addAction(dataAction)
-        toolsMenu.addAction(templateAction)
         toolsMenu.addAction(preferencesAction)
 
         viewMenu = self.menuBar().addMenu('View')
         docksAction = QAction('Show/Hide Docks', self)
         docksAction.setShortcut('Ctrl+H')
         docksAction.triggered.connect(self.toggle_docks)
+        viewMenu.addAction(docksAction)
+
         interactiveAction = QAction('MPL Interactive Mode', self)
         interactiveAction.setShortcut('Ctrl+M')
         interactiveAction.setStatusTip('Toggle Matplotlib\'s interactive mode')
         interactiveAction.triggered.connect(self.toggle_interactive)
+        viewMenu.addAction(interactiveAction)
+
         darkAction = QAction('Dark Mode', self)
         darkAction.setShortcut('Ctrl+B')
         darkAction.setStatusTip('Toggle dark user interface')
         darkAction.triggered.connect(self.toggle_dark_mode)
-        viewMenu.addAction(docksAction)
-        viewMenu.addAction(interactiveAction)
         viewMenu.addAction(darkAction)
 
         self.showMaximized()
         ### Adding Figure Settings dock to right side currently screws this up
         self.control_frame.setFixedHeight(self.control_frame.height()) #(98 on my screen)
         self.control_frame.setFixedWidth(self.control_frame.width()) #(450 on my screen)
+        self.figure_settings.setFixedWidth(141)
 
         ### Delete later, just for speed
-#        self.open_data_manager()
+        self.open_data_manager()
 
     def groups_to_contents(self, groups):
         contents = {}
@@ -214,29 +213,67 @@ class Telemetry_Grapher(QMainWindow):
             contents.update({group: dict(zip(aliases, units))})
         return contents
 
-    def save_figure(self):
-        ### Disconnected from button, but still should be connected to menubar action (TBI)
-        """Saves figure using PyQt5's file dialog. Default format is .jpg."""
+    def save(self):
+        self.control_frame.rename()
         AF = self.axes_frame
-        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
-        AF.draw()
+        AF.current_sps = []
+        for group in self.groups.values(): group.density = 100
+        AF.refresh_all()
+#        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
+#        AF.draw()
 
-        ### ONLY JPG WORKS RIGHT NOW. Other functionality coming soon!
+        filename = self.filename + self.default_ext
+        if filename in os.listdir(self.save_dir):
+            plt.savefig(self.save_dir + '\\' + filename, dpi=300, transparent=True, bbox_inches='tight')
+#            with open(self.filename + '.pickle', 'wb') as f:
+#                pl.dump(AF.fig, f)
+            self.statusBar().showMessage('Saved to {}'.format(self.save_dir))
+        else:
+            self.save_as()
+
+    def save_as(self):
+        """Saves figure using PyQt5's file dialog. Default format is .jpg."""
+        self.control_frame.rename()
+        AF = self.axes_frame
+        AF.current_sps = []
+        for group in self.groups.values(): group.density = 100
+        AF.refresh_all()
+#        AF.select_subplot(None, force_select=[])  # force deselect before save (no highlighted axes in saved figure)
+#        AF.draw()
+
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.AnyFile)
-#        dlg.setConfirmOverwrite(True)
-        dlg_output = dlg.getSaveFileName(self, 'Save Figure', os.getcwd(), "JPEG Image (*.jpg);;PNG Image (*.png)")
-        plt.savefig(dlg_output[0], dpi=300, format='jpg', transparent=True, bbox_inches='tight')
-        TG.statusBar().showMessage('Saved to {}'.format(dlg_output[0]))
+        dlg.setViewMode(QFileDialog.Detail)
 
+        dlg_output = dlg.getSaveFileName(self,
+                                         'Save Figure',
+                                         self.save_dir + '/' + self.filename,
+                                         "JPEG Image (*.jpg);;PNG Image (*.png)")
+        if dlg_output[0]:
+            savepath = dlg_output[0]
+            self.save_dir = savepath[:savepath.rindex('/')]  # store saving directory
+            self.default_ext = savepath[savepath.index('.'):]  # store file extension
+            plt.savefig(savepath, dpi=300, transparent=True, bbox_inches='tight')
+
+#            with open(self.filename + '.pickle', 'wb') as f:
+#                pkl.dump(AF.fig, f)
+
+            self.statusBar().showMessage('Saved to {}'.format(savepath))
 
     # I could move this and the unit_dicts/clarify dictionaries to DM, and have it read/write from/to a .txt file
     # ^ No, I don't think you can. DM is a QDialog and all its information will be lost when it's closed.
     def get_unit_type(self, unit):
+        """This is a quasi-parsing function"""
+        # check user units first
+        for e in self.user_units:
+            if unit in self.user_units[e]:
+                return e
+        # if not found, check hard-coded unit_dict
         for e in self.unit_dict:
             if unit in self.unit_dict[e]:
                 return e
-        return None
+        # else, return default type
+        return self.default_type
 
     def closeEvent(self, event):
         """Hides any floating QDockWidgets and closes all created figures upon application exit."""
@@ -250,14 +287,35 @@ class Telemetry_Grapher(QMainWindow):
 
     def open_fig(self):
         pass
+#        print(self.figure_settings.unit_table.size())
+#        print(self.figure_settings.majorXgrid.isChecked())
+#        pass
+#        AF = self.axes_frame
+#        dlg_output = QFileDialog.getOpenFileName(self,
+#                                                  "Open Saved Figure",
+#                                                  self.save_dir,
+#                                                  "(*.pickle)")
+#        if dlg_output[0]:
+#            fig = pkl.load(open(dlg_output[0], 'rb'))
+#            _ = plt.figure()
+#            manager = _.canvas.manager
+#            manager.canvas.figure = fig
+#            AF.fig.set_canvas(manager.canvas)
+#            print(fig)
+#            for ax in fig.axes:
+#                print(ax)
+#                print(ax.lines)
+#                print(ax.get_legend())
+#                h, l = ax.get_legend_handles_labels()
+#                print(h)
+#                print(l)
+#            AF.fig.show()
+#            AF.draw()
 
     def undo(self):
         pass
 
     def redo(self):
-        pass
-
-    def refresh_all(self):
         pass
 
     def open_data_manager(self):
@@ -287,25 +345,29 @@ class Telemetry_Grapher(QMainWindow):
 #        qr.moveCenter(cp)
 #        self.move(qr.topLeft())
 
+
 class Axes_Frame(FigureCanvas):
     """Container for figure with subplots. New Axes_Frame objects are created and when a new Figure tab is created (TBI)."""
+
     def __init__(self, parent):
         self.parent = parent
+        TG = self.parent
+        CF = TG.control_frame
+        FS = TG.figure_settings
         self.fig = plt.figure(constrained_layout=False)  # not working with gridspec in controls frame. Look into later.
         super().__init__(self.fig)
         self.weights = [1]
-        FS = self.parent.figure_settings
-        left = (1-FS.figWidth.value())/2
-        right = 1-left
-        bottom = (1-FS.figHeight.value())/2
-        top = 1-bottom
+        left = FS.leftPad.value()
+        right = 1 - FS.rightPad.value()
+        bottom = FS.lowerPad.value()
+        top = 1 - FS.upperPad.value()
         gs = gridspec.GridSpec(1, 1, left=left, right=right, bottom=bottom, top=top)
         ax0 = self.fig.add_subplot(gs[0])
         self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
         self.current_sps = []
-        self.available_data = self.parent.groups_to_contents(parent.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
+        self.available_data = TG.groups_to_contents(TG.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
-        self.fig.suptitle(parent.control_frame.titleEdit.text(), fontsize=20)
+        self.fig.suptitle(CF.titleEdit.text(), fontsize=20)
         self.draw()
 
     def refresh_all(self):
@@ -317,15 +379,17 @@ class Axes_Frame(FigureCanvas):
         for ax in self.fig.axes: ax.remove()
 
         n = max([len(sp.axes[2:]) for sp in self.subplots])
-        legOffset = 0
+
+        # If any subplot has a legend, treat it like another secondary axis
         for sp in self.subplots:
             if sp.legend and sp.contents:
-                legOffset = FS.legendOffset.value()
+                n += 1
                 break
-        left = (1 - FS.figWidth.value())/2
-        right = 1 - left - FS.parOffset.value()*n - legOffset
-        bottom = (1 - FS.figHeight.value())/2
-        top = 1 - bottom
+
+        left = FS.leftPad.value()
+        right = 1 - FS.rightPad.value() - FS.parOffset.value()*n
+        bottom = FS.lowerPad.value()
+        top = 1 - FS.upperPad.value()
         gs = gridspec.GridSpec(len(self.subplots), 1,
                                height_ratios=self.weights,
                                left=left, right=right, bottom=bottom, top=top,
@@ -339,9 +403,15 @@ class Axes_Frame(FigureCanvas):
         self.fig.suptitle(CF.titleEdit.text(), fontsize=FS.titleSize.value())
 
         CF.cleanup_axes()
+        g = functools.reduce(math.gcd, self.weights)
+        self.weights = [w//g for w in self.weights]  # simplify weights by their greatest common denominator (eg [2,2,4] -> [1,1,2])
         CF.weightsEdit.setText(str(self.weights))
-        self.select_subplot(None, force_select=[self.subplots[i] for i in reselect])
-        self.draw()
+
+        try:
+            self.select_subplot(None, force_select=[self.subplots[i] for i in reselect])
+        except IndexError:  # happens when you try to delete all the plots, some issue with instance attribute current_sps not updating when you set it to []
+            pass
+            # select_subplot calls self.draw(), don't need to do it again
 
     def select_subplot(self, event, force_select=None):
         """Highlights clicked-on subplot and displays subplot contents in plotted tree.
@@ -424,120 +494,196 @@ class Axes_Frame(FigureCanvas):
                 TG.statusBar().showMessage('No subplot selected')
         self.draw()
 
+
 class Control_Frame(QWidget):
     """Contains all buttons for controlling the organization of subplots and saving the figure."""
+
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.grid = QGridLayout()
+        grid = QGridLayout()
 
-        title = QLabel('Figure title:')
-        self.grid.addWidget(title,0,0)
+        title = QLabel('Title:')
+        grid.addWidget(title,0,0)
 
         self.titleEdit = QLineEdit('New_Figure')
-        self.titleEdit.returnPressed.connect(self.rename)
-        self.grid.addWidget(self.titleEdit,0,1,1,5)
+        self.titleEdit.editingFinished.connect(self.rename)
+        grid.addWidget(self.titleEdit,0,1,1,5)
 
-        weighting = QLabel('Weighting:')
-        self.grid.addWidget(weighting,1,0,2,1)
+        weighting = QLabel('Weights:')
+        grid.addWidget(weighting,1,0,2,1)
 
         self.weightsEdit = QLineEdit('[1]')
-        self.weightsEdit.returnPressed.connect(self.adjust_weights)
-        self.grid.addWidget(self.weightsEdit,1,1,2,2)
+        self.weightsEdit.editingFinished.connect(self.adjust_weights)
+        grid.addWidget(self.weightsEdit,1,1,2,2)
 
-        selectStart = QLabel('Start Timestamp')
-        self.grid.addWidget(selectStart,3,0,2,1)
+        selectStart = QLabel('Start:')
+        grid.addWidget(selectStart,3,0,2,1)
 
-        self.selectStart = QLineEdit('2018-12-06 00:00')
-        self.selectStart.returnPressed.connect(self.time_filter)
-        self.grid.addWidget(self.selectStart,3,1,2,2)
+        self.selectStart = QDateTimeEdit()
+        self.selectStart.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
+        self.selectStart.dateTimeChanged.connect(self.time_filter)
+        grid.addWidget(self.selectStart,3,1,2,1)
 
-        selectEnd = QLabel('End Timestamp')
-        self.grid.addWidget(selectEnd,5,0,2,1)
+        self.minTS = QPushButton('Min')
+        self.minTS.setFixedWidth(30)
+        self.minTS.clicked.connect(self.set_start_min)
+        grid.addWidget(self.minTS,3,2,2,1)
 
-        self.selectEnd = QLineEdit('2018-12-09 00:00')  # dummy start/end from PHI_HK, default will be None
-        self.selectEnd.returnPressed.connect(self.time_filter)
-        self.grid.addWidget(self.selectEnd,5,1,2,2)
+        selectEnd = QLabel('End:')
+        grid.addWidget(selectEnd,5,0,2,1)
+
+        self.selectEnd = QDateTimeEdit(QDate.currentDate())
+        self.selectEnd.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
+        self.selectEnd.dateTimeChanged.connect(self.time_filter)
+        grid.addWidget(self.selectEnd,5,1,2,1)
+
+        self.maxTS = QPushButton('Max')
+        self.maxTS.setFixedWidth(30)
+        self.maxTS.clicked.connect(self.set_end_max)
+        grid.addWidget(self.maxTS,5,2,2,1)
 
         self.cycle = QPushButton('Cycle Axes')
         self.cycle.clicked.connect(lambda: self.cycle_subplot(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.cycle,1,3,2,1)
+        grid.addWidget(self.cycle,1,3,2,1)
 
         self.legendToggle = QCheckBox('Legend')
         self.legendToggle.clicked.connect(lambda: self.toggle_legend(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.legendToggle,3,3,2,1)
+        grid.addWidget(self.legendToggle,3,3,2,1)
 
         self.colorCoord = QCheckBox('Color by Unit')
         self.colorCoord.clicked.connect(lambda: self.color_coordinate(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.colorCoord,5,3,2,1)
+        grid.addWidget(self.colorCoord,5,3,2,1)
 
         self.insert = QPushButton('Insert')
         self.insert.clicked.connect(lambda: self.insert_subplot(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.insert,1,4,2,1)
+        grid.addWidget(self.insert,1,4,2,1)
 
         self.delete = QPushButton('Delete')
         self.delete.clicked.connect(lambda: self.delete_subplot(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.delete,3,4,2,1)
+        grid.addWidget(self.delete,3,4,2,1)
 
         self.clear = QPushButton('Clear')
         self.clear.clicked.connect(lambda: self.clear_subplot(parent.axes_frame.current_sps))
-        self.grid.addWidget(self.clear,5,4,2,1)
+        grid.addWidget(self.clear,5,4,2,1)
 
         self.reorderUp = QPushButton()
         self.reorderUp.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_TitleBarShadeButton')))
         self.reorderUp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.reorderUp.clicked.connect(lambda: self.reorder(parent.axes_frame.current_sps, 'up'))
-        self.grid.addWidget(self.reorderUp,1,5,3,1)
+        grid.addWidget(self.reorderUp,1,5,3,1)
 
         self.reorderDown = QPushButton()
         self.reorderDown.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_TitleBarUnshadeButton')))
         self.reorderDown.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.reorderDown.clicked.connect(lambda: self.reorder(parent.axes_frame.current_sps, 'down'))
-        self.grid.addWidget(self.reorderDown,4,5,3,1)
-
-        self.setLayout(self.grid)
+        grid.addWidget(self.reorderDown,4,5,3,1)
 
         col_weights = [.01, .01, .01, 1, 1, .01]
         for i,cw in enumerate(col_weights):
-            self.grid.setColumnStretch(i,cw)
+            grid.setColumnStretch(i,cw)
+        self.setLayout(grid)
 
     def cleanup_axes(self):
-        AF = self.parent.axes_frame
-        FS = self.parent.figure_settings
-        for sp in AF.subplots[:-1]:  # set all xaxes invisible
-            sp.host().tick_params(axis='x', which='major', labelbottom=False)
-            for ax in sp.axes: ax.tick_params(axis='y', labelsize=FS.tickSize.value())
-            # if FS.majorX.isChecked():
-            sp.host().grid(b=True, axis='x')
-        base_X = AF.subplots[-1].host()
-        base_X.grid(b=True, axis='x')
-        plt.sca(base_X)
-        plt.xticks(rotation=FS.tickRot.value(), ha='right', fontsize=FS.tickSize.value())
-        plt.yticks(fontsize=FS.tickSize.value())
+        TG = self.parent
+        AF = TG.axes_frame
+        FS = TG.figure_settings
 
+        for i, sp in enumerate(AF.subplots):
+            if i == len(AF.subplots)-1:  # Bottom-most subplot only
+
+                # Tell the host axes' xaxis it's plotting dates
+                sp.host().xaxis_date()
+
+                # Give focus to host axes
+                plt.sca(sp.host())
+                if not sp.contents:  # maybe in the future: go through subplots, find one with contents, use its xaxis ticks/labels as base xaxis ticks/labels (quality of life)
+                    # If subplot is empty, don't show xaxis ticks
+                    sp.host().tick_params(axis='x', labelbottom=False, bottom=False)
+                else:
+                    # Otherwise, set host axes' xaxis major formatter, locator, and minor locator
+                    sp.host().tick_params(axis='x', labelbottom=True, bottom=True)
+                    plt.xticks(rotation=FS.tickRot.value(), ha='right', fontsize=FS.tickSize.value())
+
+                    self.toggle_grid(sp)
+                plt.yticks(fontsize=FS.tickSize.value())
+            else:  # All other subplots
+                sp.host().tick_params(axis='x', which='major', labelbottom=False)
+                for ax in sp.axes:
+                    ax.tick_params(axis='y', labelsize=FS.tickSize.value())
+                self.toggle_grid(sp)
+
+    def toggle_grid(self, sp):
+        TG = self.parent
+        FS = TG.figure_settings
+        linestyles = ['-', '--', ':', '-.']
+
+        if FS.majorXgrid.isChecked():
+            sp.host().xaxis.grid(which='major')
+        if FS.minorXgrid.isChecked():
+            sp.host().minorticks_on()
+#            sp.host().tick_params(axis='x', which='minor', bottom=True)
+            sp.host().xaxis.grid(which='minor')
+        if FS.majorYgrid.isChecked():
+            for i, ax in enumerate(sp.axes):
+                ax.yaxis.grid(which='major', linestyle=linestyles[i%len(linestyles)])
+        if FS.minorYgrid.isChecked():
+            for i, ax in enumerate(sp.axes):
+                ax.minorticks_on()  # turns both x and y on, don't know how to only get it on one axis
+#                ax.tick_params(axis='y', which='minor')
+                ax.yaxis.grid(b=True, which='minor', linestyle=linestyles[i%len(linestyles)])
+
+    def cap_start_end(self):
+        TG = self.parent
+        try:
+            data_start = min([TG.groups[name].data.index[0] for name in TG.groups.keys()])
+            self.start = max([data_start, self.start])
+            data_end = max([TG.groups[name].data.index[-1] for name in TG.groups.keys()])
+            self.end = min([data_end, self.end])
+
+            self.selectStart.setMinimumDateTime(data_start)
+            self.selectStart.setMaximumDateTime(self.end)
+            self.selectEnd.setMaximumDateTime(data_end)
+            self.selectEnd.setMinimumDateTime(self.start)
+        except ValueError:
+            self.selectStart.setMinimumDateTime(dt.datetime.strptime('2000-01-01 00:00:00', '%Y-%m-%d  %H:%M:%S'))
+            self.selectStart.setMaximumDateTime(self.end)
+            self.selectEnd.setMaximumDateTime(QDateTime.currentDateTime())
+            self.selectEnd.setMinimumDateTime(self.start)
+        return self.start, self.end
+
+    def set_start_min(self):
+        self.selectStart.setDateTime(self.selectStart.minimumDateTime())
+
+    def set_end_max(self):
+        self.selectEnd.setDateTime(self.selectEnd.maximumDateTime())
 
     def time_filter(self):
-        self.start = pd.to_datetime(self.selectStart.text())
-        self.end = pd.to_datetime(self.selectEnd.text())
-        if not self.start: self.start = min([self.groups[name].data.index[0] for name in self.groups.keys()])
-        if not self.end: self.end = max([self.groups[name].data.index[-1] for name in self.groups.keys()])
+        TG = self.parent
+        AF = TG.axes_frame
+        self.start = self.selectStart.dateTime().toPyDateTime()
+        self.end = self.selectEnd.dateTime().toPyDateTime()
+        self.start, self.end = self.cap_start_end()
+        self.timespan = self.end - self.start
 
-        # doch you do need them because they're strings (I think) (dunno if it'll stay that way)
-        self.timespan = pd.to_datetime(self.end)-pd.to_datetime(self.start)  # shouldn't need to use pd.to_datetime here, self.start/end should already be datetimes at this point
-        if self.timespan < dt.timedelta(days=1):
-            self.dotsize = 0.8
-        else:
-            self.dotsize = 0.5
-        if self.timespan >= dt.timedelta(days=2) and self.timespan < dt.timedelta(days=4):
+        if self.timespan >= dt.timedelta(days=4):
+            self.dateformat = mdates.DateFormatter('%d %b %Y')
+            self.major_locator = mdates.DayLocator()
+            self.minor_locator = mdates.HourLocator(interval=12)
+        elif self.timespan >= dt.timedelta(days=2) and self.timespan < dt.timedelta(days=4):
             self.dateformat = mdates.DateFormatter('%d/%b %H:%M')
             self.major_locator = mdates.DayLocator()
-        elif self.timespan >= dt.timedelta(days=4):
-            self.dateformat = mdates.DateFormatter('%d/%b %H:%M')
-            self.major_locator = mdates.DayLocator()
+            self.minor_locator = mdates.HourLocator(interval=12)
         else:
-            self.dateformat = mdates.DateFormatter('%d %b %Y %H:%M')
+            self.dateformat = mdates.DateFormatter('%d %b %Y %H:%M dalla dalla biyul yall')
             self.major_locator = mdates.HourLocator(interval=2)
-        self.parent.axes_frame.refresh_all()
+            self.minor_locator = mdates.HourLocator(interval=1)
+        for sp in AF.subplots:
+            for ax in sp.axes:
+                ax.xaxis.set_major_formatter(self.dateformat)
+                ax.xaxis.set_major_locator(self.major_locator)
+                ax.xaxis.set_minor_locator(self.minor_locator)
+        AF.refresh_all()
 
     def reorder(self, sps, direction):
         """Reorders selected subplot up or down and updates weighting field."""
@@ -559,7 +705,6 @@ class Control_Frame(QWidget):
         else:
             TG.statusBar().showMessage('Select one subplot to reorder')
 
-
     def insert_subplot(self, sps):
         """Inserts subplot at top of figure. (Indexed insertion not working)"""
         TG = self.parent
@@ -577,29 +722,26 @@ class Control_Frame(QWidget):
         AF.weights.insert(index+1, 1)
         AF.refresh_all()
 
-
     def delete_subplot(self, sps):
         """Deletes selected subplot(s) and adds contents back into available tree."""
         TG = self.parent
         if sps:
             AF = TG.axes_frame
-            if len(AF.subplots) == 1:
-                self.clear_subplot(sps)
-            else:
+            SF = TG.series_frame
+            indices = [sp.index for sp in sps]
+            for i in reversed(indices):
+                if len(AF.subplots) == 1:
+                    self.clear_subplot(sps)
+                else:
                 # Delete entries at selected indices from weights, current selection, and Subplot_Managers
-                SF = TG.series_frame
-                indices = [sp.index for sp in sps]
-
-                for i in sorted(indices, reverse=True):
                     AF.available_data = SF.add_to_contents(AF.available_data, AF.subplots[i].contents)
                     SF.populate_tree(AF.available_data, SF.available)  # add contents back into available tree
                     del AF.weights[i]
                     del AF.subplots[i]
-                AF.current_sps = []  # deselect everything
-                AF.refresh_all()
+            AF.current_sps = []  # deselect everything
+            AF.refresh_all()
         else:
             TG.statusBar().showMessage('Select one or more subplots to delete')
-
 
     def clear_subplot(self, sps):
         """Adds selected subplot's contents back into available tree, clears axis."""
@@ -614,12 +756,12 @@ class Control_Frame(QWidget):
                 SF.search(SF.searchAvailable, SF.available, AF.available_data)
                 sp.contents = {}
                 sp.order = [None]
+                sp.plot(skeleton=True)
             AF.refresh_all()
 #            if len(sps) > 1: TG.statusBar().showMessage('Cleared subplots: {}'.format(sorted([sp.index for sp in sps])))
 #            else: TG.statusBar().showMessage('Cleared subplot: {}'.format(sps[0].index))
         else:
             TG.statusBar().showMessage('Select one or more subplots to clear')
-
 
     def toggle_legend(self, sps):
         """Toggles legend display of selected subplot."""
@@ -637,7 +779,6 @@ class Control_Frame(QWidget):
         else:
             self.legendToggle.setCheckable(False)
             TG.statusBar().showMessage('Select one or more subplots to toggle legend')
-
 
     def color_coordinate(self, sps):
         """Recolors lines and axes in selected subplot to correspond by unit type."""
@@ -657,7 +798,6 @@ class Control_Frame(QWidget):
             self.colorCoord.setCheckable(False)
             TG.statusBar().showMessage('Select one or more subplots to toggle color coordination')
 
-
     def cycle_subplot(self, sps):
         """Cycles through unit order permutations."""
         TG = self.parent
@@ -670,7 +810,6 @@ class Control_Frame(QWidget):
             AF.refresh_all()
         else:
             TG.statusBar().showMessage('Select one or more subplots to cycle unit plotting order')
-
 
     def adjust_weights(self):
         """Adjusts subplot vertical aspect ratios based on provided list of weights (or sequence of digits)."""
@@ -688,13 +827,11 @@ class Control_Frame(QWidget):
         if len(weights) != len(AF.subplots):
             TG.statusBar().showMessage('{} weights provided for figure with {} subplots'.format(len(weights), len(AF.subplots)))
             return
-        g = functools.reduce(math.gcd, weights)
-        weights = [w//g for w in weights]  # simplify weights by their greatest common denominator (eg [2,2,4] -> [1,1,2])
         AF.weights = weights
         AF.refresh_all()
 
     def rename(self):
-        """Renames figure and changes save path to new figure title."""
+        """Renames figure."""
         TG = self.parent
         AF = TG.axes_frame
         FS = TG.figure_settings
@@ -704,17 +841,9 @@ class Control_Frame(QWidget):
             fig_title = 'New_Figure'
         else:
             AF.fig.suptitle(fig_title, fontsize=FS.titleSize.value())
-#        input_path = self.pathEdit.text()
-#        try:
-#            save_dir = input_path[:input_path.rindex('\\')]  # path string up until last backslash occurrence
-#        except ValueError:
-#            save_dir = os.getcwd()
-#        try:
-#            ext = input_path[input_path.rindex('.'):]  # path string from last . occurrence to end
-#        except ValueError:
-#            ext = '.jpg'  # default to JPG format
-#        self.pathEdit.setText(save_dir + '\\' + fig_title + ext)
+            TG.filename = fig_title
         AF.draw()
+
 
 class Series_Frame(QWidget):
     """Manages imported data. Shows hierarchically the series (with assigned units) available to plot and the series plotted in the selected subplot(s)."""
@@ -801,7 +930,6 @@ class Series_Frame(QWidget):
 #            else:
 #                contents.update({group: to_add[group]})
 #        return contents
-
 
     def remove_from_contents(self, contents, to_remove):
         for group, headers_units in to_remove.items():
@@ -912,7 +1040,8 @@ class Series_Frame(QWidget):
                 # Add/remove contents from sp
                 self.update_subplot_contents(sp, plottedFunc(sp.contents, contents))
                 # Refresh sp
-                sp.plot()
+#                sp.axes = [sp.host()]
+                sp.plot(skeleton=True)
                 AF.refresh_all()
                 # Transfer contents to/from available_data
                 AF.available_data = availableFunc(AF.available_data, contents)
@@ -959,186 +1088,198 @@ class Series_Frame(QWidget):
 #            self.populate_tree(contents, tree)
 #            self.cleanup()
 
+
 class QColorButton(QPushButton):
-        def __init__(self, parent, color, unit_type):
-            super(QColorButton, self).__init__()
-            self.parent = parent
-            self.color = color
-            self.setStyleSheet("background-color:{};".format(color))
-            self.unit_type = unit_type
+
+    def __init__(self, parent, color, unit_type):
+        super(QColorButton, self).__init__()
+        self.setFixedSize(20,20)
+        self.parent = parent
+        self.color = color
+        self.setStyleSheet("background-color:{};".format(color))
+        self.unit_type = unit_type
 
 
 class Figure_Settings(QWidget):
+
     def __init__(self, parent, saved=None):
         super().__init__()
         self.parent = parent
         TG = self.parent
 
         mpl.rc('font', family='serif')  # controlable later maybe
-        # Read saved values from .txt file
+        self.markers = [  # when color coordination is on, use markers in this order to differentiate series
+                'o',
+                '+',
+                'x',
+                'D',
+                's',
+                '^',
+                'v',
+                '<',
+                '>',
+            ]
+# Read saved values from .txt file?
 
-        grid = QGridLayout()
+        vbox = QVBoxLayout()
 
         figBounds = QLabel('Figure Dimensions')
         figBounds.setAlignment(Qt.AlignCenter)
-        figHeight = QLabel('Height')
-        self.figHeight = QDoubleSpinBox()
-        self.figHeight.setRange(0, 1)
-        self.figHeight.setSingleStep(.01)
-        self.figHeight.setValue(.90)
-        figWidth = QLabel('Width')
-        self.figWidth = QDoubleSpinBox()
-        self.figWidth.setRange(0, 1)
-        self.figWidth.setSingleStep(.01)
-        self.figWidth.setValue(.90)
-        hspace = QLabel('V Offset')
+        vbox.addWidget(figBounds)
+        figureForm = QFormLayout()
+        self.upperPad = QDoubleSpinBox()
+        self.upperPad.setRange(0, 0.5)
+        self.upperPad.setSingleStep(.01)
+        self.upperPad.setValue(0.07)
+        figureForm.addRow('Upper Pad',self.upperPad)
+        self.lowerPad = QDoubleSpinBox()
+        self.lowerPad.setRange(0, 0.5)
+        self.lowerPad.setSingleStep(.01)
+        self.lowerPad.setValue(0.08)
+        figureForm.addRow('Lower Pad',self.lowerPad)
+        self.leftPad = QDoubleSpinBox()
+        self.leftPad.setRange(0, 0.5)
+        self.leftPad.setSingleStep(.01)
+        self.leftPad.setValue(0.05)
+        figureForm.addRow('Left Pad',self.leftPad)
+        self.rightPad = QDoubleSpinBox()
+        self.rightPad.setRange(0, 0.5)
+        self.rightPad.setSingleStep(.01)
+        self.rightPad.setValue(0.05)
+        figureForm.addRow('Right Pad',self.rightPad)
+
         self.hspace = QDoubleSpinBox()
         self.hspace.setRange(0, 1)
         self.hspace.setSingleStep(.01)
         self.hspace.setValue(.05)
-        parOffset = QLabel('H Offset')
+        figureForm.addRow('Spacing',self.hspace)
         self.parOffset = QDoubleSpinBox()
         self.parOffset.setRange(0, 1)
-        self.parOffset.setSingleStep(.01)
+        self.parOffset.setDecimals(3)
+        self.parOffset.setSingleStep(.005)
         self.parOffset.setValue(.05)
-        legendOffset = QLabel('Legend Offset')
-        self.legendOffset = QDoubleSpinBox()
-        self.legendOffset.setRange(0, 1)
-        self.legendOffset.setSingleStep(.01)
-        self.legendOffset.setValue(.1)
+        figureForm.addRow('Axis Offset',self.parOffset)
+        vbox.addLayout(figureForm)
 
         gridToggles = QLabel('Grid Settings')
         gridToggles.setAlignment(Qt.AlignCenter)
+        vbox.addWidget(gridToggles)
+        gridGrid = QGridLayout()
         self.majorXgrid = QCheckBox('Major X')
+        gridGrid.addWidget(self.majorXgrid,0,0)
         self.minorXgrid = QCheckBox('Minor X')
+        gridGrid.addWidget(self.minorXgrid,0,1)
         self.majorYgrid = QCheckBox('Major Y')
+        gridGrid.addWidget(self.majorYgrid,1,0)
         self.minorYgrid = QCheckBox('Minor Y')
+        gridGrid.addWidget(self.minorYgrid,1,1)
+        vbox.addLayout(gridGrid)
+
+        plotStyle = QLabel('Plot Settings')
+        plotStyle.setAlignment(Qt.AlignCenter)
+        vbox.addWidget(plotStyle)
+        plotHBox = QHBoxLayout()
+        self.line = QRadioButton('Line')
+        plotHBox.addWidget(self.line)
+        self.scatter = QRadioButton('Scatter')
+        self.scatter.setChecked(True)
+        plotHBox.addWidget(self.scatter)
+        vbox.addLayout(plotHBox)
+        self.dotsize = QDoubleSpinBox()
+        self.dotsize.setRange(0, 5)
+        self.dotsize.setSingleStep(.1)
+        self.dotsize.setValue(0.5)
+        dotForm = QFormLayout()
+        dotForm.addRow('Marker Size', self.dotsize)
+        vbox.addLayout(dotForm)
 
         textSettings = QLabel('Text Settings')
         textSettings.setAlignment(Qt.AlignCenter)
-        titleSize = QLabel('Title')
+        vbox.addWidget(textSettings)
+        textForm = QFormLayout()
         self.titleSize = QSpinBox()
         self.titleSize.setRange(0, 60)
-        self.titleSize.setValue(20)
-        labelSize = QLabel('Axis Labels')
+        self.titleSize.setValue(30)
+        textForm.addRow('Title', self.titleSize)
         self.labelSize = QSpinBox()
-        self.labelSize.setRange(0, 60)
+        self.labelSize.setRange(0, 30)
         self.labelSize.setValue(12)
-        tickSize = QLabel('Tick Size')
+        textForm.addRow('Axis Labels', self.labelSize)
         self.tickSize = QSpinBox()
         self.tickSize.setRange(0, 20)
         self.tickSize.setValue(10)
-        tickRot = QLabel('Tick Rotation')
+        textForm.addRow('Tick Size', self.tickSize)
         self.tickRot = QSpinBox()
         self.tickRot.setRange(0, 90)
-        self.tickRot.setValue(50)
-
-        self.dlg = QColorDialog()
-        for i, unit_type in enumerate(TG.unit_dict):
-            self.dlg.setCustomColor(i, QColor(mcolors.to_hex(TG.color_dict[unit_type])))
+        self.tickRot.setValue(45)
+        textForm.addRow('Tick Rotation', self.tickRot)
+        vbox.addLayout(textForm)
 
         self.unit_table = QTableWidget()
+        self.unit_table.setFixedWidth(123)
         self.unit_table.setColumnCount(2)
-        self.unit_table.setRowCount(len(TG.unit_dict))
+        self.unit_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.unit_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.unit_table.horizontalHeader().hide()
+        self.unit_table.verticalHeader().hide()
+        self.unit_table.verticalHeader().setDefaultSectionSize(self.unit_table.verticalHeader().minimumSectionSize())
+        self.unit_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.unit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        for i, unit_type in enumerate(TG.unit_dict):
+        vbox.addWidget(self.unit_table)
+        self.setLayout(vbox)
+
+        self.dlg = QColorDialog()
+        self.color_dict = {None:'k','':'k'}
+        self.update_unit_table()
+
+    def update_unit_table(self):
+        TG = self.parent
+        all_units = {**TG.unit_dict, **TG.user_units}
+        self.unit_table.setRowCount(len(all_units))
+        for i, unit_type in enumerate(all_units):
+            if unit_type not in self.color_dict:
+                self.color_dict.update({unit_type:'C'+str(i%10)})
+        for i, unit_type in enumerate(all_units):
+            self.dlg.setCustomColor(i, QColor(mcolors.to_hex(self.color_dict[unit_type])))
+        for i, unit_type in enumerate(all_units):
             self.unit_table.setItem(i, 0, QTableWidgetItem(unit_type))
-            colorButton = QColorButton(self, mcolors.to_hex(TG.color_dict[unit_type]), unit_type)
+            colorButton = QColorButton(self, mcolors.to_hex(self.color_dict[unit_type]), unit_type)
             colorButton.clicked.connect(self.pick_color)
-            self.unit_table.setCellWidget(i, 1, colorButton)
-
-        widgets = [
-                figBounds,
-                figHeight,
-                self.figHeight,
-                figWidth,
-                self.figWidth,
-                hspace,
-                self.hspace,
-                parOffset,
-                self.parOffset,
-                legendOffset,
-                self.legendOffset,
-
-                gridToggles,
-                self.majorXgrid,
-                self.minorXgrid,
-                self.majorYgrid,
-                self.minorYgrid,
-
-                textSettings,
-                titleSize,
-                self.titleSize,
-                labelSize,
-                self.labelSize,
-                tickSize,
-                self.tickSize,
-                tickRot,
-                self.tickRot,
-
-                self.unit_table,
-                ]
-
-        positions = [
-                (4,0,1,2),  # Figure Dimensions
-                (5,0,1,1),
-                (5,1,1,1),
-                (6,0,1,1),
-                (6,1,1,1),
-                (7,0,1,1),
-                (7,1,1,1),
-                (8,0,1,1),
-                (8,1,1,1),
-                (9,0,1,1),
-                (9,1,1,1),
-
-                (11,0,1,2),  # Grid Settings
-                (12,0,1,1),
-                (12,1,1,1),
-                (13,0,1,1),
-                (13,1,1,1),
-
-                (15,0,1,2),  # Text Settings
-                (16,0,1,1),
-                (16,1,1,1),
-                (17,0,1,1),
-                (17,1,1,1),
-                (18,0,1,1),
-                (18,1,1,1),
-                (19,0,1,1),
-                (19,1,1,1),
-
-                (21,0,1,2),  # Color Palette
-                ]
-
-        for w, p in zip(widgets, positions):
-            grid.addWidget(w, *p)
-        self.setLayout(grid)
+            _widget = QWidget()
+            _layout = QHBoxLayout(_widget)
+            _layout.addWidget(colorButton)
+            _layout.setAlignment(Qt.AlignCenter)
+            _layout.setContentsMargins(0,0,0,0)
+            self.unit_table.setCellWidget(i, 1, _widget)
 
     def connect_widgets(self, container):
         widgets = [
-                self.figHeight,
-                self.figWidth,
+                self.upperPad,
+                self.lowerPad,
+                self.leftPad,
+                self.rightPad,
                 self.hspace,
                 self.parOffset,
-                self.legendOffset,
-
-                self.majorXgrid,
-                self.minorXgrid,
-                self.majorYgrid,
-                self.minorYgrid,
-
+                self.dotsize,
                 self.titleSize,
                 self.labelSize,
                 self.tickSize,
                 self.tickRot,
-
-                self.unit_table,
                 ]
-        for w in widgets[0:5]:
+        for w in widgets:
             w.valueChanged.connect(container.refresh_all)
-        for w in widgets[9:13]:
-            w.valueChanged.connect(container.refresh_all)
+
+        widgets = [
+                self.majorXgrid,
+                self.minorXgrid,
+                self.majorYgrid,
+                self.minorYgrid,
+                self.line,
+                self.scatter,
+                ]
+        for w in widgets:
+            w.toggled.connect(container.refresh_all)
 
     def pick_color(self):
         colorButton = QObject.sender(self)
@@ -1150,8 +1291,13 @@ class Figure_Settings(QWidget):
             colorButton.color = self.dlg.currentColor().name()
             colorButton.setStyleSheet("background-color:{};".format(colorButton.color))
             self.color_dict[unit_type] = colorButton.color
+            TG = self.parent
+            AF = TG.axes_frame
+            AF.refresh_all()
+
 
 class Data_Manager(QDialog):
+
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
@@ -1159,61 +1305,55 @@ class Data_Manager(QDialog):
         self.setWindowIcon(QIcon('satellite.png'))
 
         self.groups = copy.deepcopy(parent.groups)  # copy so that if you can still discard changes
-        self.group_reassign = {name:[] for name in self.groups}  # for renaming groups
+        self.group_reassign = {name:[name] for name in self.groups}  # for renaming groups
 #        print(self.group_reassign)
+
         self.modified = False
 
         self.resize(1000,500)
-        self.grid = QGridLayout()
+        grid = QGridLayout()
         self.tabBase = QTabWidget()
         self.tabBase.setStyleSheet("QTabBar::tab {height: 30px; width: 300px} QTabWidget::tab-bar {alignment:center;}")
-        self.tabBase.currentChanged.connect(self.refresh_tab)
-        self.save = QPushButton('Save')
-        self.save.setDefault(True)
-        self.save.clicked.connect(self.save_changes)
-        self.cancel = QPushButton('Cancel')
-        self.cancel.clicked.connect(self.close)  # AttributeError: 'bool' object has no attribute 'accept' -> from event.accept()
+        grid.addWidget(self.tabBase,0,0,1,3)
+
         msgLog = QLabel('Message Log:')
+        grid.addWidget(msgLog,1,0)
+
         self.messageLog = QTextEdit()
         self.messageLog.setReadOnly(True)
         self.messageLog.setText('Ready')
+        grid.addWidget(self.messageLog,1,1,2,1)
 
-        self.grid.addWidget(self.tabBase,0,0,1,3)
-        self.grid.addWidget(msgLog,1,0)
-        self.grid.addWidget(self.messageLog,1,1,2,1)
-        self.grid.addWidget(self.save,1,2)
-        self.grid.addWidget(self.cancel,2,2)
-        self.grid.setColumnStretch(1,100)
-        #self.messageLog.resize(self.messageLog.width(),100)
+        self.save = QPushButton('Save')
+        self.save.setDefault(True)
+        self.save.clicked.connect(self.save_changes)
+        grid.addWidget(self.save,1,2)
 
-        self.setLayout(self.grid)
-        self.import_tab = Import_Tab(self)
-        self.dataframes_tab = DataFrames_Tab(self)
+        self.cancel = QPushButton('Cancel')
+        self.cancel.clicked.connect(self.close)
+        grid.addWidget(self.cancel,2,2)
+
+        grid.setColumnStretch(1,100)
+        self.setLayout(grid)
+
+#        self.import_tab = Import_Tab(self)
+        self.groups_tab = Groups_Tab(self)
         self.configure_tab = Configure_Tab(self)
-        self.tabBase.addTab(self.import_tab, 'Import')
-        self.tabBase.addTab(self.configure_tab, 'Configure')
-        self.tabBase.addTab(self.dataframes_tab, 'DataFrames')
+        self.groups_tab.search_dir()
+
+#        self.tabBase.addTab(self.import_tab, 'Import Settings')
+        self.tabBase.addTab(self.groups_tab, 'File Grouping')
+        self.tabBase.addTab(self.configure_tab, 'Series Configuration')
 
     def keyPressEvent(self, event):
-        """Close application from escape key.
-
-        results in QMessageBox dialog from closeEvent, good but how/why?
-        """
+        """Close dialog from escape key."""
         if event.key() == Qt.Key_Escape:
             self.close()
 
-    def refresh_tab(self, tab_index):
-        if self.tabBase.currentIndex() == 1:  # hard coded - this will break if I ever rearrange the tabs. But I think that's ok.
-            # Configure Tab
-            self.configure_tab.display_header_info()
-        elif self.tabBase.currentIndex() == 2:
-            # DataFrames Tab
-            self.dataframes_tab.display_dataframe()
-
-    def popup(self, text, informative=None, details=None, buttons=2):
+    def popup(self, text, title='', informative=None, details=None, buttons=2):
         """Brings up a message box with provided text and returns Ok or Cancel."""
         self.prompt = QMessageBox()
-        self.prompt.setWindowTitle("HEY.")
+        self.prompt.setWindowTitle(title)
         self.prompt.setIcon(QMessageBox.Question)
         self.prompt.setText(text)
         if buttons == 2:
@@ -1226,7 +1366,9 @@ class Data_Manager(QDialog):
         return self.prompt.exec_()
 
     def feedback(self, message, mode='line'):
-        """Adds message to message log as one line. Set overwrite=True to overwrite the last line in the log."""
+        """Adds message to message log as one line.
+        Set mode=overwrite to overwrite the last line in the log.
+        Set mode=append to append the last line in the log."""
         if mode == 'line':
             self.messageLog.setText(self.messageLog.toPlainText() + '\n' + message)
         elif mode == 'append':
@@ -1240,53 +1382,51 @@ class Data_Manager(QDialog):
         if self.modified:
             TG = self.parent
             SF = TG.series_frame
+            CF = TG.control_frame
             ### Eventually, loop this through all open axes frames (excel tab implementation)
             AF = TG.axes_frame
-            TG.groups = self.groups
 
             # Get new alias/unit information from self.groups
             new_contents = TG.groups_to_contents(self.groups)
 
             # Rename/delete groups in subplots first
             for sp in AF.subplots:
-                for group in copy.deepcopy(tuple(sp.contents.keys())):
-#                    print('MW group: ',group)
-                    if group not in new_contents:  # if not recognized
-#                        print('group_reassign: ',self.group_reassign)
-                        if group in self.group_reassign:  # check if it's been renamed
-                            new_name = self.group_reassign[group][-1]
-                            sp.contents[new_name] = sp.contents[group]  # if so, take the most recent renaming
-                        del sp.contents[group]  # scrap the old one
-#                print('sp.contents: ',sp.contents)
+                for group_name in copy.copy(tuple(sp.contents.keys())):
+                    # Try to reassign group name
+                    if group_name in self.group_reassign:
+                        new_name = self.group_reassign[group_name][-1] # get new name
+                        new_series = self.groups[new_name].series
 
-            # Rename/delete series in subplots
-            for sp in AF.subplots:
-                for group in sp.contents:
-                    aliases = copy.deepcopy(tuple(sp.contents[group].keys()))  # define loop elements first so it doesn't change size during iteration
-#                    print('aliases: ', aliases)
-                    new_series = self.groups[group].series
-#                    print('new series: ',new_series.keys())
-                    for alias in aliases:
-                        del sp.contents[group][alias]  # scrap old alias entry (no matter what)
-#                        print('sp.contents after del: ', sp.contents)
-#                        print('\ncurrent alias_dict: ',self.parent.groups[group].alias_dict)
-                        try:
-                            header = self.parent.groups[group].alias_dict[alias]  # get original header of each alias in sp.contents
-                        except KeyError:  # if original header being used as alias (because no alias was assigned)
-                            header = alias
-#                        print('alias: header  ->  ', alias,': ',header)
-                        if header in new_series and new_series[header].keep:  # if original header recognized in new groups
-                            new_alias = new_series[header].alias
-                            if not new_alias: new_alias = header
-#                            print('new alias: ',new_alias)
-                            sp.contents[group][new_alias] = new_series[header].unit  # make new entry with new_alias
-                            del new_contents[group][new_alias]
-#                            print('sp.contents after replace: ',sp.contents)
-                              # delete the entry in new_contents so we can just dump the rest into AF.available_data
-                        if not new_contents[group]: del new_contents[group]  # scrap any now-empty groups
-#                        print('new contents after replace: ',new_contents)
-                sp.plot()
-            AF.draw()
+                        aliases = copy.copy(tuple(sp.contents[group_name].keys()))
+                        for alias in aliases:
+                            del sp.contents[group_name][alias]  # delete the alias entry first in case alias == new_alias
+
+                            try:
+                                header = TG.groups[group_name].alias_dict[alias]  # get original header of each alias in sp.contents
+                            except KeyError:  # if original header being used as alias (because no alias was assigned)
+                                header = alias
+                            if header in new_series and new_series[header].keep:
+                                new_alias = new_series[header].alias
+                                if not new_alias: new_alias = header
+                                sp.contents[group_name][new_alias] = new_series[header].unit
+
+                                del new_contents[new_name][new_alias]
+
+                            if not new_contents[new_name]: del new_contents[new_name]
+
+                        transfer = sp.contents[group_name] # transfer contents from old to new
+                        del sp.contents[group_name] # scrap the old
+                        sp.contents[new_name] = transfer  # transfer variable because if you do a 1:1 assignment it will get deleted right away if the group wasn't renamed!
+                    else:
+                        del sp.contents[group_name] # scrap it because it doesn't exist in new_contents
+
+                SF.update_subplot_contents(sp, sp.contents)  # hopefully will take care of the ghost unit problem
+            TG.groups = self.groups
+
+            CF.time_filter()  # calls AF.refresh_all()
+
+            #reset group_reassign
+            self.group_reassign = {name:[name] for name in self.groups}
 
             # Dump everything else into AF.available_data
             AF.available_data = new_contents
@@ -1300,10 +1440,9 @@ class Data_Manager(QDialog):
             self.feedback('Saved data to main window.')
             self.modified = False
 
-
     def closeEvent(self, event):
         if self.modified:
-            if self.popup('Discard changes?') == QMessageBox.Cancel:
+            if self.popup('Discard changes?', title='Exiting Data Manager') == QMessageBox.Cancel:
                 event.ignore()
             else:
                 QApplication.clipboard().clear()
@@ -1312,153 +1451,133 @@ class Data_Manager(QDialog):
             QApplication.clipboard().clear()
             event.accept()
 
-class Import_Tab(QWidget):
+
+class Groups_Tab(QWidget):
+
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.grid = QGridLayout()
+        DM = self.parent
+        self.importsettings = QWidget()
+
         self.path_dict = {}
         self.dir = os.getcwd()
-        self.auto_parse = True
 
-#        self.dir = r'C:\Users\seery\Documents\German (the person)\PHI_data_housekeeping\CSV'  # delete later, just for quicker access
+        vbox = QVBoxLayout()
 
-#        dirLabel = QLabel('Directory:')
+        hbox = QHBoxLayout()
         self.browse = QPushButton()
         self.browse.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_DialogOpenButton')))
         self.browse.clicked.connect(self.browse_dialog)
+        hbox.addWidget(self.browse)
+
         self.directory = QLineEdit(self.dir)
         self.directory.returnPressed.connect(self.search_dir)
+        hbox.addWidget(self.directory)
+
+        vbox.addLayout(hbox)
+
+        grid = QGridLayout()
+
         self.fileSearch = QLineEdit()
         self.fileSearch.setPlaceholderText('Search')
         self.fileSearch.textChanged.connect(self.filter_files)
         self.fileSearch.setFocus(True)
-        self.groupName = QLineEdit('Test')  # delete initial text later
+        grid.addWidget(self.fileSearch, 0, 0)
+
+        self.groupName = QLineEdit('Test')  # delete initial text later #!!!
         self.groupName.setPlaceholderText('Group Name')
-        self.autoParseCheck = QCheckBox('Automatically parse units from headers')
-        self.autoParseCheck.setChecked(True)
-        self.autoParseCheck.stateChanged.connect(self.toggle_auto_parse)
-        foundFilesLabel = QLabel('Found Files')
-        groupFilesLabel = QLabel('Files in Group')
-        importedGroupsLabel = QLabel('Imported Groups')
-        self.foundFiles = QListWidget()
-        self.foundFiles.setSelectionMode(QListWidget.ExtendedSelection)
-        self.groupFiles = QListWidget()
-        self.groupFiles.setSelectionMode(QListWidget.ExtendedSelection)
-        self.importedGroups = QListWidget()
-        self.importedGroups.addItems(self.parent.groups.keys())
-        self.add = QPushButton('Add to Group')
-        self.add.clicked.connect(lambda: self.toggle_file_active('Add'))
-        self.remove = QPushButton('Remove from Group')
-        self.remove.clicked.connect(lambda: self.toggle_file_active('Remove'))
-        self.editGroup = QPushButton('Rename Group')
-        self.editGroup.clicked.connect(self.rename_group)
-        self.importSettings = QPushButton('Import Settings')
-        self.importSettings.clicked.connect(self.open_import_settings)
+        self.groupName.returnPressed.connect(self.import_group)
+        grid.addWidget(self.groupName, 0, 1)
+
         self.importGroup = QPushButton('Import Group')
         self.importGroup.clicked.connect(self.import_group)
+        self.importGroup.setDefault(True)
+        grid.addWidget(self.importGroup, 0, 2)
+
+        foundFilesLabel = QLabel('Found Files')
+        grid.addWidget(foundFilesLabel, 1, 0)
+
+        groupFilesLabel = QLabel('Files in Group')
+        grid.addWidget(groupFilesLabel, 1, 1)
+
+        importedGroupsLabel = QLabel('Imported Groups')
+        grid.addWidget(importedGroupsLabel, 1, 2)
+
+        self.foundFiles = QListWidget()
+        self.foundFiles.setSelectionMode(QListWidget.ExtendedSelection)
+        grid.addWidget(self.foundFiles, 2, 0)
+
+        self.groupFiles = QListWidget()
+        self.groupFiles.setSelectionMode(QListWidget.ExtendedSelection)
+        grid.addWidget(self.groupFiles, 2, 1)
+
+        self.importedGroups = QListWidget()
+        self.importedGroups.addItems(DM.groups.keys())
+        self.importedGroups.itemDoubleClicked.connect(self.rename_group)
+        grid.addWidget(self.importedGroups, 2, 2)
+
+        self.add = QPushButton('Add to Group')
+        self.add.clicked.connect(lambda: self.toggle_file_active('Add'))
+        grid.addWidget(self.add, 3, 0)
+
+        self.remove = QPushButton('Remove from Group')
+        self.remove.clicked.connect(lambda: self.toggle_file_active('Remove'))
+        grid.addWidget(self.remove, 3, 1)
+
         self.deleteGroup = QPushButton('Delete Group')
         self.deleteGroup.clicked.connect(self.delete_group)
+        grid.addWidget(self.deleteGroup, 3, 2)
 
+        vbox.addLayout(grid)
 
-        #row_weights = [1, 1, 1, 1, 1, 1]
-        #for i,rw in enumerate(row_weights):
-        #    self.import_tab.grid.setRowStretch(i,rw)
-        #col_weights = [1, 1, 1, 1, 1, 1]
-        #for i,cw in enumerate(col_weights):
-        #    self.import_tab.grid.setColumnStretch(i,cw)
-
-        widgets = [
-#                dirLabel,
-                self.browse,
-                self.directory,
-                self.fileSearch,
-                self.groupName,
-                self.autoParseCheck,
-                foundFilesLabel,
-                groupFilesLabel,
-                importedGroupsLabel,
-                self.foundFiles,
-                self.groupFiles,
-                self.importedGroups,
-                self.add,
-                self.remove,
-                self.editGroup,
-                self.importSettings,
-                self.importGroup,
-                self.deleteGroup,
-                ]
-        positions = [
-                (0,0,1,1),
-                (0,1,1,3),
-#                (0,3,1,1),
-                (1,1,1,1),
-                (1,2,1,1),
-                (1,3,1,1),
-                (2,1,1,1),
-                (2,2,1,1),
-                (2,3,1,1),
-                (3,1,1,1),
-                (3,2,1,1),
-                (3,3,1,1),
-                (4,1,1,1),
-                (4,2,1,1),
-                (4,3,1,1),
-                (5,1,1,1),
-                (5,2,1,1),
-                (5,3,1,1),
-                ]
-
-        for w, p in zip(widgets, positions):
-            self.grid.addWidget(w, *p)
-        self.setLayout(self.grid)
-        self.search_dir()
-
-
-    def toggle_auto_parse(self):
-        self.auto_parse = self.autoParseCheck.isChecked()
+        self.setLayout(vbox)
 
     def search_dir(self):
-
-        def gather_files(path):
-            """Returns list of file names in directory path which match types in filetypes.
-            Excludes temporary files.
-            Does not search subfolders.
-            Also returns dictionary associating files to their source paths."""
-            found_files = []
-            path_dict = {}
-            filetypes = re.compile(r'(csv|zip|txt|xls|xlsx)$')
-            exclude = re.compile(r'^~\$')
-            for file in os.listdir(path):
-                if re.search(filetypes, file) and not re.search(exclude, file):
-                    found_files.append(file)
-                    path_dict[file] = os.path.join(path, file)
-            return found_files, path_dict
-
+        DM = self.parent
+        TG = DM.parent
         path = self.directory.text()
         self.dir = path
-        self.loaded_files, new_path_dict_entries = gather_files(path)
+        self.loaded_files, new_path_dict_entries = self.gather_files(path)
         self.path_dict.update(new_path_dict_entries)
+        for file in self.path_dict:
+            if file not in TG.path_kwargs:
+                TG.path_kwargs[self.path_dict[file]] = {'format':'Infer', 'header':'Auto', 'index_col':'Auto', 'skiprows':None}
+
         self.fileSearch.setText('')
         self.foundFiles.clear()
         self.foundFiles.addItems(self.loaded_files)
-        TG = self.parent.parent
-        for file in self.path_dict:
-            if file not in TG.path_kwargs:
-                TG.path_kwargs[self.path_dict[file]] = {'header':'Auto', 'index_col':'Auto', 'skiprows':None}
 
     def browse_dialog(self):
         path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
-        self.directory.setText(path)
-        self.search_dir()
+        if path:
+            self.directory.setText(path)
+            self.search_dir()
+
+    def gather_files(self, path):
+        """Returns list of file names in directory path which match types in filetypes.
+        Excludes temporary files.
+        Does not search subfolders.
+        Also returns dictionary associating files to their source paths."""
+        found_files = []
+        path_dict = {}
+        filetypes = re.compile(r'(csv|zip|txt|xls|xlsx)$')
+        exclude = re.compile(r'^~\$')
+        for file in os.listdir(path):
+            if re.search(filetypes, file) and not re.search(exclude, file):
+                found_files.append(file)
+                path_dict[file] = os.path.join(path, file)
+        return found_files, path_dict
 
     def filter_files(self):
+        DM = self.parent
         pattern = re.compile(self.fileSearch.text(), re.IGNORECASE)
-        matches = [item for item in self.loaded_files if re.search(pattern,item)]
+        matches = [item for item in DM.import_tab.loaded_files if re.search(pattern,item)]
         self.foundFiles.clear()
         self.foundFiles.addItems(matches)
 
     def toggle_file_active(self, caller):
+        DM = self.parent
         if caller == 'Add':
             for file in self.foundFiles.selectedItems():
                 if file.text() in [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]:
@@ -1469,44 +1588,44 @@ class Import_Tab(QWidget):
             for file in self.groupFiles.selectedItems():
                 self.groupFiles.takeItem(self.groupFiles.row(file))
 
-    def rename_group(self):
+    def rename_group(self, item):
         DM = self.parent
         try:
-            item = self.importedGroups.selectedItems()[0]
-            group = item.text()
-            new_name, ok = QInputDialog.getText(self, 'Rename Group \"{}\"'.format(group), 'New group name:')
-            if ok:
-                DM.groups[new_name] = DM.groups[group]
-                del DM.groups[group]
-                for name in DM.group_reassign:
-                    if group == name or group in DM.group_reassign[name]:
-                        DM.group_reassign[name].append(new_name)
-                        break
-                i = self.importedGroups.row(item)
-                self.importedGroups.takeItem(i)
-                self.importedGroups.insertItem(i, QListWidgetItem(new_name))
-                i = DM.dataframes_tab.selectGroup.findText(group)
-                DM.dataframes_tab.selectGroup.removeItem(i)
-                DM.dataframes_tab.selectGroup.insertItem(i, new_name)
-                i = DM.configure_tab.selectGroup.findText(group)
-                DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group))
-                DM.configure_tab.selectGroup.insertItem(i, new_name)
-                DM.modified = True
-        except IndexError:
-            pass
+#            item = self.importedGroups.selectedItems()[0]
+            group_name = item.text()
+            new_name, ok = QInputDialog.getText(self, 'Rename Group \"{}\"'.format(group_name), 'New group name:', QLineEdit.Normal, group_name)
+            if ok and new_name != group_name:
+                if new_name in DM.groups:
+                    DM.feedback('Group \"{}\" already exists. Please choose a different name.'.format(new_name))
+                else:
+                    # Create new entry in DM.groups with new_name, give it old group's info, scrap the old one
+                    DM.groups[new_name] = DM.groups[group_name]
+                    del DM.groups[group_name]
 
-    def open_import_settings(self):
-        self.settingsDialog = Import_Settings(self)
-        self.settingsDialog.setModal(True)
-        self.settingsDialog.show()
+                    # Append new name list of renames
+                    # DM.group_reassign looks like {TG name: [TG name, rename1, rename2... DM name]}
+                    for name in DM.group_reassign:
+                        if group_name == DM.group_reassign[name][-1]:
+                            DM.group_reassign[name].append(new_name)
+                            break
+                    i = self.importedGroups.row(item)
+                    self.importedGroups.takeItem(i)
+                    self.importedGroups.insertItem(i, QListWidgetItem(new_name))
+                    i = DM.configure_tab.selectGroup.findText(group_name)
+                    DM.configure_tab.selectGroup.blockSignals(True)
+                    DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group_name))
+                    DM.configure_tab.selectGroup.blockSignals(False)
+                    DM.configure_tab.selectGroup.insertItem(i, new_name)
+                    DM.modified = True
+        except IndexError as e:
+            print(e)
 
-    def parse_df_origin(self, path, read_func):
-        """Searches through first 10 rows for the first datetime and returns the cell above it as label origin."""
-        nrows = 10
+    def parse_df_origin(self, path, read_func, nrows=20):
+        """Searches through first 20 rows for the first datetime and returns the cell above it as label origin."""
         n = 1
         while n <= nrows:  # avoid asking for more rows than there are
             try:
-                df = read_func(path, nrows=n, header=None)
+                df = read_func(path, nrows=n, header=None, encoding='latin1')
                 n += 1
             except IndexError:
                 if 'df' not in locals(): df = pd.DataFrame()
@@ -1521,514 +1640,332 @@ class Import_Tab(QWidget):
                             r = None
                         else:  # else return cell above first parseable cell
                             r = r-1
-                        return df, r, c
+                        return r, c
                 except ValueError:
                     pass
-        return df, None, None
+        return None, None
 
-    def import_group(self):
+    def parse_unit(self, header):
+        DM = self.parent
+        TG = DM.parent
+        regex = re.compile('\[.+?\]')  # matches any characters between square brackets (but not empty [])
+        parsed = None
+        for parsed in re.finditer(regex, header):  # parsed ends up as last match
+            pass
+        if parsed:
+            parsed = parsed.group(0)[1:-1]  # return parsed unit without the brackets
+            if parsed in TG.unit_clarify:
+                parsed = TG.unit_clarify[parsed]
+            if TG.get_unit_type(parsed) != TG.default_type:
+                return parsed
+        return TG.default_unit
 
-        def floatify(data):
-            """Strip everything but numbers, minus signs, and decimals, and returns data as a float. Returns NaN if not possible. Try to convert booleans to 1/0."""
+    def floatify(self, data):
+        """Strip everything but numbers, minus signs, and decimals, and returns data as a float. Returns NaN if not possible. Try to convert booleans to 1/0."""
+        try:
+            return float(data)  # try returning data as float as-is. Should speed things up.
+        except (ValueError, TypeError):
             if str(data).lower() in ('on','true','yes','enabled'): return 1.0
             if str(data).lower() in ('off','false','no','disabled'): return 0.0
             try:
-                scrubbed = re.sub('[^0-9-.]', '', str(data))
-                scrubbed = re.sub(',', '.', scrubbed)  # allow for German-style decimals (1,2 -> 1.2 but 1,2 -> 1.2. will still fail appropriately)
+                scrubbed = re.sub(',', '.', str(data))  # allow for German-style decimals (1,2 -> 1.2 but 1,2 -> 1.2. will still fail appropriately)
+                scrubbed = re.sub('[^0-9-.]', '', scrubbed)
                 return float(scrubbed)
             except ValueError:
                 return np.nan
 
-        def parse_unit(header):
-            regex = re.compile('\[.*?\]')  # matches any characters between square brackets
-            parsed = None
-            for parsed in re.finditer(regex, header):  # parsed ends up as last match
-                pass
-            if parsed:
-                parsed = parsed.group(0)[1:-1]  # return parsed unit without the brackets
-                if parsed in DM.parent.unit_clarify:
-                    parsed = DM.parent.unit_clarify[parsed]
-                if DM.parent.get_unit_type(parsed) is not None:
-                    return parsed
-            return None
-
-        def combine_files(pathlist):
-            dflist = []
-            counter = 1
-            for path in pathlist:
-                mode = 'line' if counter == 1 else 'overwrite'
-                DM.feedback('Reading files into group \"{}\": ({}/{}) ... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
-                DM.messageLog.repaint()
-                counter += 1
-
-                # Get parse kwargs associated with file
-                kwargs = {'encoding':'latin1'}  # just load the dang file
-                parse_kwargs = TG.path_kwargs[path]
-                kwargs.update(parse_kwargs)
-                if path.endswith('xls') or path.endswith('xlsx'):
-                    read_func = pd.read_excel
-                elif path.endswith('csv') or path.endswith('zip'):
-                    read_func = pd.read_csv
-#                    kwargs.update({'encoding':'ISO-8859-1', 'sep':',', 'engine':'python'})
-#                    kwargs.update({'encoding':'utf-8-sig', 'sep':',', 'engine':'python'})
-
-                # Take header_row and index_col as intersecting cell above first parseable datetime
-                warnings.filterwarnings('ignore')  # to ignore UserWarning: Discarding nonzero nanoseconds in conversion
-                _, kwargs['header'], kwargs['index_col'] = self.parse_df_origin(path, read_func)
-
-                # Override header_row and index_col if not set to 'Auto'
-                if parse_kwargs['header'] != 'Auto': kwargs['header'] = parse_kwargs['header']
-                if parse_kwargs['index_col'] != 'Auto': kwargs['index_col'] = parse_kwargs['index_col']
-                kwargs['skiprows'] = parse_kwargs['skiprows']
-
-                try:
-                    if kwargs['header'] is None: raise ValueError('Auto parser could not find a header row. Check import settings.')  # don't let the user try to read a file with no header row
-                    if kwargs['index_col'] is None: raise ValueError('Auto parser could not find an index column. Check import settings.')  # don't let the user try to read a file without declaring an index column
-                    data = read_func(path, **kwargs)
-                    data.index.names = ['Timestamp']
-                    data.index = pd.to_datetime(data.index, infer_datetime_format=True)
-                    if any(ts == pd.NaT for ts in data.index): raise ValueError('Timestamps could not be parsed from given index column. Check import settings.')
-                    dflist.append(data)
-                except ValueError as e:
-                    for file in self.path_dict:
-                        if self.path_dict[file] == path: source = file
-                    if 'source' not in locals(): source = path
-                    DM.feedback('File "\{}\" threw an error: {}'.format(source[1:], e))
-                    return pd.DataFrame()
-                TG.path_kwargs[path].update(kwargs)
-
-            DM.feedback('Done', mode='append')
-            df = pd.concat(dflist, axis=0, sort=False)
-            df = df.applymap(floatify)
-            return df.sort_index()
-
-        ### Beginning of actions
+    def combine_files(self, pathlist):
         DM = self.parent
         TG = DM.parent
-        group = self.groupName.text()
+        dflist = []
+        counter = 1
+        for path in pathlist:
+            mode = 'line' if counter == 1 else 'overwrite'
+            DM.feedback('Reading files into group \"{}\": ({}/{})... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
+            DM.messageLog.repaint()
+            counter += 1
+
+            # Get parse kwargs associated with file
+            path_kwargs = {'encoding':'latin1'}  # just load the dang file
+            path_kwargs.update(TG.path_kwargs[path])
+            del path_kwargs['format']  # because it gets used somewhere else but comes from the same dictionary
+#                kwargs.update(path_kwargs)
+            if path.endswith('xls') or path.endswith('xlsx'):
+                read_func = pd.read_excel
+#                    path_kwargs.update({'sheet_name':None})  # read all sheets
+            elif path.endswith('csv') or path.endswith('zip'):
+                read_func = pd.read_csv
+
+            try:
+                # Take header_row and index_col as intersecting cell above first parseable datetime
+#                    warnings.filterwarnings('ignore')  # to ignore UserWarning: Discarding nonzero nanoseconds in conversion
+                _, auto_header, auto_index_col = self.shown_dfs[path]#self.parse_df_origin(path, read_func)
+
+                # Override header_row and index_col if set to 'Auto'
+                if path_kwargs['header'] == 'Auto':
+                    path_kwargs['header'] = auto_header
+                    auto_header = True
+                if path_kwargs['index_col'] == 'Auto':
+                    path_kwargs['index_col'] = auto_index_col
+                    auto_index_col = True
+
+                # If set to 'Auto' and auto-parser couldn't find a value, raise error
+                if path_kwargs['header'] is None: raise ValueError('Auto parser could not find a header row. Check import settings.')  # don't let the user try to read a file with no header row
+                if path_kwargs['index_col'] is None: raise ValueError('Auto parser could not find an index column. Check import settings.')  # don't let the user try to read a file without declaring an index column
+
+                data = read_func(path, **path_kwargs)
+
+                data.index.names = ['Timestamp']
+                data.columns = data.columns.map(str)  # convert headers to strings
+
+                if TG.path_kwargs[path]['format'] == 'Infer':
+                    dtf = None
+# this seems to make no difference, and I have yet to run into an error parsing datetimes with infer_datetime_format...
+# should I just hand over the reigns on this entirely to Pandas?
+                else:
+                    dtf = TG.path_kwargs[path]['format']
+
+                data.index = pd.to_datetime(data.index, format=dtf, infer_datetime_format=True)
+                if any(ts == pd.NaT for ts in data.index): raise ValueError('Timestamps could not be parsed from given index column. Check import settings.')
+
+                dflist.append(data)
+            except ValueError as e:
+                for file in DM.import_tab.path_dict:
+                    if DM.import_tab.path_dict[file] == path: source = file
+                if 'source' not in locals(): source = path
+                DM.feedback('File "\{}\" threw an error: {}'.format(source[1:], e))
+                return pd.DataFrame()
+
+            TG.path_kwargs[path].update(path_kwargs)
+            if auto_header is True: TG.path_kwargs[path]['header'] = 'Auto'
+            if auto_index_col is True: TG.path_kwargs[path]['index_col'] = 'Auto'
+
+        df = pd.concat(dflist, axis=0, sort=False)
+        DM.feedback('Scrubbing data... ', mode='append')
+        DM.messageLog.repaint()
+        df = df.applymap(self.floatify)
+        DM.feedback('Done', mode='append')
+        return df.sort_index()
+
+    def import_group(self):
+        DM = self.parent
+        TG = DM.parent
+        group_name = self.groupName.text()
         loaded_groups = [self.importedGroups.item(i).text() for i in range(self.importedGroups.count())]
 
         # Use case filtering
-        if group == '':
+        if group_name == '':
             DM.feedback('Group name cannot be empty.')
             return
-        elif group in loaded_groups:
-            if DM.popup('Group \"{}\" already exists. Overwrite?'.format(group)) == QMessageBox.Ok:
-                self.importedGroups.takeItem(loaded_groups.index(group))
+        elif group_name in loaded_groups:
+            if DM.popup('Group \"{}\" already exists. Overwrite?'.format(group_name)) == QMessageBox.Ok:
+                self.importedGroups.takeItem(loaded_groups.index(group_name))
+                #??? If group_name is a renaming of a previously loaded group, is that bad?
             else:
                 return
         source_files = [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]  #read groupfiles listview
         if not source_files:
             DM.feedback('Group cannot have 0 associated files.')
             return
-        source_paths = [self.path_dict[file] for file in source_files]  #path_dict is quasi global, appended gather_files (therefore, navigating to a different directory should not disconnect files from paths)
-        df = combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
 
-        if not df.empty:
-            DM.groups[group] = Group(df, source_files, source_paths)  # this is writing to Data_Manager's version, not TG's
-            self.importedGroups.addItem(group)
+        self.shown_dfs = {}
+        if self.verify_import_settings(source_files):#result == QDialog.Accepted:
+            source_paths = [self.path_dict[file] for file in source_files]  #path_dict is quasi global, appended gather_files (therefore, navigating to a different directory should not disconnect files from paths)
+            df = self.combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
 
-            # Try to auto parse units
-            parse_error_log = []
-            if self.auto_parse:
-                for header in DM.groups[group].series:
-                    parsed = parse_unit(header)
-                    DM.groups[group].series[header].unit = parsed
-                    if parsed is None:
-                        parse_error_log.append(header)  # parse_error_log formerly associated headers with their source files, but this has been removed because you can just look at the data in the DataFrames tab to figure out what the unit should be in the event of parse failure
-            if parse_error_log:
-                report = ''
-                for header in parse_error_log:
-                    report += header+'\n'
-                DM.popup('Unit Parse Failure',
-                         informative='Unable to parse units from the following headers. See Configure tab to manually assign units.',
-                         details=report,
-                         buttons=1)
+            if not df.empty:
+                DM.groups[group_name] = Group(df, source_files, source_paths)  # this is writing to Data_Manager's version, not TG's
+                self.importedGroups.addItem(group_name)
 
-            # Update other tabs but don't trigger table filling
-            for combo in [DM.dataframes_tab.selectGroup, DM.configure_tab.selectGroup]:
-                combo.blockSignals(True)
-                combo.addItem(group)
-                combo.blockSignals(False)
+                # Try to auto parse units
+                if TG.auto_parse: self.parse_group_units([group_name])
 
-            self.groupFiles.clear()
-            self.groupName.setText('')
-            DM.modified = True
+                DM.configure_tab.selectGroup.addItem(group_name)  # -> this emits a signal to call CT's display_header_info function
+                self.groupFiles.clear()
+                self.groupName.setText('')
+                DM.modified = True
+        else:
+            DM.feedback('Import canceled.', mode='append')
 
+    def verify_import_settings(self, source_files):
+        self.importsettings = Import_Settings(self, source_files)
+        self.importsettings.setModal(True)
+        return self.importsettings.exec()
+
+    def parse_group_units(self, group_names, update=False):
+        DM = self.parent
+        TG = DM.parent
+        report = ''
+        for group_name in group_names:
+            group = DM.groups[group_name]
+            for header in group.series:
+                header = str(header)
+                parsed = self.parse_unit(header)
+                group.series[header].unit = parsed
+                group.series[header].unit_type = TG.get_unit_type(parsed)
+                if parsed is None:
+                    report += header + '\n'
+            if update:
+                DM.configure_tab.populate_headerTable(group)
+        if report:
+            DM.popup('Some units not assigned.',
+                     title='Unit Parse Error Log',
+                     informative='You can assign units manually under Series Configuration, leave them blank, or adjust unit settings and reparse.',
+                     details=report,
+                     buttons=1)
 
     def delete_group(self):
         DM = self.parent
         try:
             item = self.importedGroups.selectedItems()[0]
-            group = item.text()
-            if DM.popup('Delete group \"{}\"?'.format(group)) == QMessageBox.Ok:
+            group_name = item.text()
+            if DM.popup('Delete group \"{}\"?'.format(group_name)) == QMessageBox.Ok:
                 self.importedGroups.takeItem(self.importedGroups.row(item))
-                del DM.groups[group]
-                if group in DM.group_reassign: del DM.group_reassign[group]
-                DM.dataframes_tab.selectGroup.removeItem(DM.dataframes_tab.selectGroup.findText(group))
-                DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group))
-        except IndexError:
-            pass
-        DM.modified = True  # ok if you make one and then delete it, it still thinks something's changed but WHATEVER
+                del DM.groups[group_name]
 
-
-class Configure_Tab(QWidget):
-    def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
-        self.grid = QGridLayout()
-
-
-        self.selectGroup = QComboBox()
-        self.selectGroup.addItems(self.parent.groups.keys())
-        self.selectGroup.currentIndexChanged.connect(self.display_header_info)
-        self.grid.addWidget(self.selectGroup,0,0)
-
-        self.settings = QPushButton('Unit Settings')
-        self.settings.clicked.connect(self.open_settings)
-        self.grid.addWidget(self.settings,1,0)
-
-        self.hideRows = QCheckBox('Hide Unused Headers')
-        self.hideRows.setChecked(True)
-        self.hideRows.stateChanged.connect(self.display_header_info)
-        self.grid.addWidget(self.hideRows,2,0)
-
-        self.start = QLabel()
-        self.grid.addWidget(self.start,3,0)
-
-        self.end = QLabel()
-        self.grid.addWidget(self.end,4,0)
-
-        self.total_span = QLabel()
-        self.grid.addWidget(self.total_span,5,0)
-
-        self.sampling_rate = QLabel()
-        self.grid.addWidget(self.sampling_rate,6,0)
-
-        self.headerTable = QTableWidget()
-        self.headerTable.setColumnCount(6)
-        self.headerTable.setHorizontalHeaderLabels(['Keep','Original Header','Alias','Unit Type','Unit','Scale'])
-        self.headerTable.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeToContents)
-        self.headerTable.horizontalHeader().setSectionResizeMode(1,QHeaderView.Stretch)
-        self.headerTable.horizontalHeader().setSectionResizeMode(2,QHeaderView.Stretch)
-        self.headerTable.horizontalHeader().setSectionResizeMode(3,QHeaderView.Fixed)
-        self.headerTable.horizontalHeader().setSectionResizeMode(4,QHeaderView.Fixed)
-        self.headerTable.horizontalHeader().setSectionResizeMode(5,QHeaderView.ResizeToContents)
-        self.headerTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
-        self.grid.addWidget(self.headerTable,0,1,8,1)
-
-        row_weights = [1, 1, 1, 1, 1, 1, 1, 100]
-        for i,rw in enumerate(row_weights):
-            self.grid.setRowStretch(i,rw)
-        col_weights = [1, 100]
-        for i,cw in enumerate(col_weights):
-            self.grid.setColumnStretch(i,cw)
-        self.setLayout(self.grid)
-
-        if self.selectGroup.currentText():
-            self.display_header_info()
-            self.parent.modified = False
-
-    def days_hours_minutes(self, timedelta):
-            return timedelta.days, timedelta.seconds//3600, (timedelta.seconds//60)%60
-
-    def df_span_info(self, df):
-        start = min(df.index)
-        end = max(df.index)
-        totalspan = self.days_hours_minutes(end - start)
-        timeinterval = 0; i = 1
-        while timeinterval == 0:
-            timeinterval = (df.index[i]-df.index[i-1]).total_seconds()
-            i += 1
-        return start, end, totalspan, timeinterval
-
-    def display_header_info(self):
-        try:
-            self.headerTable.cellChanged.disconnect(self.update_alias_scale)
-        except TypeError:
-            pass
-        TG = self.parent.parent
-        DM = self.parent
-        selected = self.selectGroup.currentText()
-        if selected:
-            group = DM.groups[selected]
-            df = group.data
-            start, end, total_span, sampling_rate = self.df_span_info(df)
-            self.start.setText('Data Start:\n    {}'.format(start.strftime('%Y-%m-%d  %H:%M:%S')))
-            self.end.setText('Data End:\n    {}'.format(end.strftime('%Y-%m-%d  %H:%M:%S')))
-            self.total_span.setText('Total Span:\n    {} days\n    {} hours\n    {} minutes'.format(*total_span))
-            self.sampling_rate.setText('Sampling Rate:\n    {}s'.format(sampling_rate))
-
-            if self.hideRows.isChecked():
-                nKeep = 0
-                for header in group.series:
-                    if group.series[header].keep: nKeep += 1
-            else:
-                nKeep = len(group.series)
-            self.headerTable.setRowCount(nKeep)
-
-            i = 0
-            for header in group.series:
-                keep = group.series[header].keep
-                if self.hideRows.isChecked():
-                    if not keep: continue
-                alias = group.series[header].alias
-                unit = group.series[header].unit
-                unit_type = TG.get_unit_type(unit)
-
-                keep_check = QCheckBox()
-                keep_check.setChecked(keep)
-                keep_check.setProperty("row", i)
-                keep_check.stateChanged.connect(self.update_keep)
-                self.headerTable.setCellWidget(i, 0, keep_check)
-
-                self.headerTable.setItem(i, 1, QTableWidgetItem(header))
-#                self.headerTable.item(i, 1).setFlags(Qt.ItemIsSelectable)
-
-                self.headerTable.setItem(i, 2, QTableWidgetItem(alias))
-
-                type_combo = QComboBox()
-                type_combo.addItem(None)
-                type_combo.addItems(list(TG.unit_dict.keys()))
-                type_combo.setCurrentText(unit_type)
-                type_combo.setProperty("row", i)
-                type_combo.currentIndexChanged.connect(self.update_unit_combo)
-                self.headerTable.setCellWidget(i, 3, type_combo)
-
-                unit_combo = QComboBox()
-                if unit_type is not None:
-                    unit_combo.addItems(list(TG.unit_dict[unit_type]))
-                unit_combo.setCurrentText(unit)
-                unit_combo.setProperty("row", i)
-                unit_combo.currentIndexChanged.connect(self.update_series_unit)
-                self.headerTable.setCellWidget(i, 4, unit_combo)
-
-                self.headerTable.setItem(i, 5, QTableWidgetItem(str(group.series[header].scale)))
-                i += 1
-        else:
-            self.headerTable.clear()
-            self.headerTable.setRowCount(0)
-            self.headerTable.setColumnCount(0)
-        self.headerTable.cellChanged.connect(self.update_alias_scale)
-
-    def update_alias_scale(self, row, column):
-        """Updates the alias and scaling factor of series when one of those two fields is edited"""
-        DM = self.parent
-        group = DM.groups[self.selectGroup.currentText()]
-        header = self.headerTable.item(row, 1).text()
-        if column == 2:
-            alias = self.headerTable.item(row, 2).text().strip()  # remove any trailing/leading whitespace
-            def remove_key_by_value(dictionary, value):
-                for key in dictionary:
-                    if dictionary[key] == value:
-                        del dictionary[key]
+                # delete the corresponding entry in group_reassign (if it exists)
+                for name in DM.group_reassign:
+                    if group_name == DM.group_reassign[name][-1]:
+                        del DM.group_reassign[name]
+                        DM.modified = True  # only modified if the deleted group was loaded into TG
                         break
-            if alias:
-                if alias in group.alias_dict:
-                    DM.feedback('Alias \"{}\" is already in use. Please choose a different alias.'.format(alias))
-                    self.headerTable.blockSignals(True)
-                    self.headerTable.setItem(row, 2, QTableWidgetItem(group.series[header].alias))
-                    self.headerTable.blockSignals(False)
-                    return
-                if alias in group.data.columns:
-                    DM.feedback('Alias \"{}\" is the name of an original header. Please choose a different alias.'.format(alias))
-                    self.headerTable.blockSignals(True)
-                    self.headerTable.setItem(row, 2, QTableWidgetItem(group.series[header].alias))
-                    self.headerTable.blockSignals(False)
-                    return
-                group.series[header].alias = alias
-                remove_key_by_value(group.alias_dict, header)
-                group.alias_dict[alias] = header
-            else:
-                group.series[header].alias = ''
-                remove_key_by_value(group.alias_dict, header)
-            DM.modified = True
-        elif column == 5:
-            scale = self.headerTable.item(row, 5).text()
-            try:
-                scale = float(scale)
-                if scale == 0: raise ValueError
-                group.series[header].scale = scale
-                DM.modified = True
-            except ValueError:
-                DM.feedback('\"{}\" is not a valid scaling factor. Only nonzero real numbers permitted.'.format(scale))
-            self.headerTable.blockSignals(True)  # prevents infinite recursion when setItem would call this function again
-            self.headerTable.setItem(row, 5, QTableWidgetItem(str(group.series[header].scale)))
-            self.headerTable.blockSignals(False)
+                DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group_name))
+        except IndexError as e:
+            print(e)
 
-    def update_unit_combo(self):
-        TG = self.parent.parent
-        type_combo = QObject.sender(self)
-        row = type_combo.property("row")
-        unit_combo = self.headerTable.cellWidget(row, 4)
-        unit_type = type_combo.currentText()
-        unit_combo.clear()
-        try:
-            unit_combo.addItems(list(TG.unit_dict[unit_type]))
-        except KeyError:
-            pass
-
-    def update_series_unit(self):
-        DM = self.parent
-        group = DM.groups[self.selectGroup.currentText()]
-        unit_combo = QObject.sender(self)
-        row = unit_combo.property("row")
-        unit = unit_combo.currentText()
-        header = self.headerTable.item(row, 1).text()
-        group.series[header].unit = unit
-        DM.modified = True
-
-    def update_keep(self):
-        DM = self.parent
-        group = DM.groups[self.selectGroup.currentText()]
-        keep_check = QObject.sender(self)
-        row = keep_check.property("row")
-        header = self.headerTable.item(row, 1).text()
-        group.series[header].keep = keep_check.isChecked()
-        self.display_header_info()
-        DM.modified = True
-
-    def open_settings(self):
-        self.settings_dialog = Unit_Settings(self)
-        self.settings_dialog.setModal(True)
-        self.settings_dialog.show()
-
-
-class DataFrames_Tab(QWidget):
-    def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
-        self.grid = QGridLayout()
-
-        self.selectGroup = QComboBox()
-        self.selectGroup.addItems(self.parent.groups.keys())
-        self.selectGroup.currentIndexChanged.connect(self.display_dataframe)
-        self.export = QPushButton('Export DataFrames')
-        self.export.clicked.connect(self.export_data)
-        self.dfTable = QTableView()
-        self.dfTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.dfTable.verticalHeader().setDefaultSectionSize(self.dfTable.verticalHeader().minimumSectionSize())
-        self.dfTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
-
-        widgets = [
-                self.selectGroup,
-                self.export,
-                self.dfTable,
-                ]
-
-        positions = [
-                (0,0,1,1),
-                (1,0,1,1),
-                (0,1,3,1),
-                ]
-
-        for w, p in zip(widgets, positions):
-            self.grid.addWidget(w, *p)
-        self.setLayout(self.grid)
-
-        if self.selectGroup.currentText():
-            self.display_dataframe()
-
-    def display_dataframe(self):
-        DM = self.parent
-        TG = DM.parent
-        selected = self.selectGroup.currentText()
-        if selected:
-            group = DM.groups[selected]
-            df = group.data
-
-            # Prepare table to display only headers kept in Configure tab (first 20 lines)
-            shown = 20
-            kept_df = df.head(shown).loc[:,[header for header in group.series if group.series[header].keep]]
-            kept_df.index = kept_df.index.astype('str')
-            if len(df.index) > shown:
-                ellipses = pd.DataFrame(['...']*len(kept_df.columns),
-                                        index=kept_df.columns,
-                                        columns=['...']).T
-                kept_df = kept_df.append(ellipses)
-
-            # Use Aliases, Type, Unit, as column headers
-            kept_df_headers = []
-            for header in kept_df.columns:
-                alias = group.series[header].alias
-                unit = group.series[header].unit
-                unit_type = TG.get_unit_type(unit)
-                if not alias: alias = header
-                if unit:
-                    kept_df_headers.append('{}\n{} [{}]'.format(alias, unit_type, unit))
-                else:
-                    kept_df_headers.append('{}\n(no units)'.format(alias))
-            kept_df.columns = kept_df_headers
-
-            # Display kept_df in table
-            self.model = PandasModel(kept_df)
-            self.proxy = QSortFilterProxyModel()
-            self.proxy.setSourceModel(self.model)
-            self.dfTable.setModel(self.proxy)
-            for i in range(self.model.columnCount()):
-                self.dfTable.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeToContents)
-
-        else:
-            if hasattr(self, 'proxy'): self.proxy.deleteLater()
-
-    def export_data(self):
-        """Generate an Excel sheet with kept dataframes, one per sheet/tab"""
-        pass
 
 class Import_Settings(QDialog):
-    def __init__(self, parent):
+
+    def __init__(self, parent, group_files):
         super().__init__()
         self.parent = parent
-        TG = self.parent.parent.parent
-        self.resize(750,532)
-        self.setWindowTitle('File-Specific Import Settings')
+        self.setWindowTitle('Review Import Settings')
+        self.setWindowIcon(QIcon('satellite.png'))
+        GT = self.parent
+        DM = GT.parent
+        TG = DM.parent
 
-        grid = QGridLayout()
+        self.resize(1000,500)
+        self.group_files = group_files
+
+        vbox = QVBoxLayout()
+
+        splitter = QSplitter(Qt.Vertical)
+
+
         self.kwargTable = QTableWidget()
         self.kwargTable.verticalHeader().setDefaultSectionSize(self.kwargTable.verticalHeader().minimumSectionSize())
         self.kwargTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
-        self.previewTable = QTableView()
-        self.previewTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.previewTable.verticalHeader().setDefaultSectionSize(self.previewTable.verticalHeader().minimumSectionSize())
-        self.previewTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
-        grid.addWidget(self.kwargTable, 0, 0)
-        grid.addWidget(self.previewTable, 1, 0)
-        self.setLayout(grid)
-
-        self.kwargTable.setColumnCount(4)
-        files = [self.parent.foundFiles.item(i).text() for i in range(self.parent.foundFiles.count())]
-        self.kwargTable.setRowCount(len(files))
-        self.kwargTable.setHorizontalHeaderLabels(['File', 'Header Row', 'Index Column', 'Skip Rows'])
-        for i, file in enumerate(files):
-            kwargs = TG.path_kwargs[self.parent.path_dict[file]]
-            self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
-            self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
-            self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['header'])))
-            self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['index_col'])))
-            self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['skiprows'])))
+        self.kwargTable.setRowCount(len(self.group_files))
+        self.kwargTable.setColumnCount(5)
+        self.kwargTable.setHorizontalHeaderLabels(['File', 'Datetime Format', 'Header Row', 'Index Column', 'Skip Rows'])
         self.kwargTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.kwargTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.kwargTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         self.kwargTable.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
-        self.kwargTable.cellChanged.connect(self.update_parse_kwargs)
+        self.kwargTable.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
         self.kwargTable.itemSelectionChanged.connect(self.preview_df)
+        self.kwargTable.cellChanged.connect(self.update_path_kwargs)
+        splitter.addWidget(self.kwargTable)
 
-    def update_parse_kwargs(self, row, column):
-        DM = self.parent.parent
+        self.previewTable = QTableView()
+        self.previewTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.previewTable.verticalHeader().setDefaultSectionSize(self.previewTable.verticalHeader().minimumSectionSize())
+        self.previewTable.verticalHeader().hide()
+        splitter.addWidget(self.previewTable)
+
+        self.buttonBox = QDialogButtonBox()
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Reset | QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttonBox.accepted.connect(self.accept)
+#        self.buttonBox.button(QDialogButtonBox.Ok).setAutoDefault(True)
+        self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.button(QDialogButtonBox.Reset).clicked.connect(self.reset)
+
+        vbox.addWidget(splitter)
+        vbox.addWidget(self.buttonBox)
+        self.setLayout(vbox)
+
+        DM.feedback('Loading previews... ')
+        DM.messageLog.repaint()
+
+        self.original_kwargs = copy.deepcopy(TG.path_kwargs)
+
+        for i, file in enumerate(self.group_files):
+            kwargs = TG.path_kwargs[GT.path_dict[file]]
+            self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
+            self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
+            self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['format'])))
+            self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['header'])))
+            self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['index_col'])))
+            self.kwargTable.setItem(i, 4, QTableWidgetItem(str(kwargs['skiprows'])))
+
+            if file.endswith('xls') or file.endswith('xlsx'):
+                read_func = pd.read_excel
+            elif file.endswith('csv') or file.endswith('zip'):
+                read_func = pd.read_csv
+            path = GT.path_dict[file]
+
+            # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
+            shownRows = 20
+            n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
+
+            if n > shownRows:
+                upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
+                lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
+                ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                        index=upper_df.columns,
+                                        columns=['...']).T
+                shown_df = upper_df.append(ellipses).append(lower_df)
+            else:
+                shown_df = read_func(path, header=None, encoding='latin1')
+
+            r, c = GT.parse_df_origin(path, read_func)
+
+            GT.shown_dfs[path] = (shown_df, r, c)
+
+    def reset(self):
+        GT = self.parent
+        for i, file in enumerate(self.group_files):
+            kwargs = self.original_kwargs[GT.path_dict[file]]
+            self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
+            self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
+            self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['format'])))
+            self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['header'])))
+            self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['index_col'])))
+            self.kwargTable.setItem(i, 4, QTableWidgetItem(str(kwargs['skiprows'])))
+
+    def update_path_kwargs(self, row, column):
+        GT = self.parent
+        DM = GT.parent
         TG = DM.parent
-        pick_kwargs = {1:'header', 2:'index_col', 3:'skiprows'}
+        pick_kwargs = {1:'format', 2:'header', 3:'index_col', 4:'skiprows'}
+        if column not in pick_kwargs: return
         kwarg = pick_kwargs[column]
         file = self.kwargTable.item(row, 0).text()
-        path = self.parent.path_dict[file]
+        path = GT.path_dict[file]
         text = self.kwargTable.item(row, column).text()
 
         ### input permissions
-        if kwarg == 'skiprows':
-            value = []
-            for i in text:
-                if text == 'None':
-                    value = text
-                else:
+        # NO INPUT CONTROL ON FORMAT FIELD, SO YOU BETTER KNOW WHAT YOU'RE DOING
+        if kwarg == 'format':
+            value = text
+        elif kwarg in ('header', 'index_col'):
+            if text.isdigit():
+                value = int(text)
+            elif text.lower() == 'auto':
+                value = 'Auto'
+            else:
+                DM.feedback('Only integers or \"Auto\" allowed.')
+                self.kwargTable.blockSignals(True)
+                self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
+                self.kwargTable.blockSignals(False)
+                return
+        elif kwarg == 'skiprows':
+            if text == 'None':
+                value = None
+            else:
+                value = []
+                for i in text:
                     if i.isdigit() and i not in value:  # admit only unique digits
                         if int(i) != 0: value.append(int(i))  # silently disallow zero
                     elif i in ', []':  # ignore commas, spaces, and brackets
@@ -2042,26 +1979,17 @@ class Import_Settings(QDialog):
             self.kwargTable.blockSignals(True)
             self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
             self.kwargTable.blockSignals(False)
-        else:
-            if text.isdigit():
-                value = int(text)
-            elif text.lower() == 'auto':
-                value = 'Auto'
-            else:
-                DM.feedback('Only integers or \"Auto\" allowed.')
-                self.kwargTable.blockSignals(True)
-                self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
-                self.kwargTable.blockSignals(False)
-                return
+
         self.kwargTable.blockSignals(True)
         self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
         self.kwargTable.blockSignals(False)
         TG.path_kwargs[path][kwarg] = value
         self.preview_df()
 
-
     def preview_df(self):
-        TG = self.parent.parent.parent
+        GT = self.parent
+        DM = GT.parent
+        TG = DM.parent
         selection = self.kwargTable.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
@@ -2074,10 +2002,11 @@ class Import_Settings(QDialog):
                     read_func = pd.read_excel
                 elif file.endswith('csv') or file.endswith('zip'):
                     read_func = pd.read_csv
-                path = self.parent.path_dict[file]
-                df, r, c = self.parent.parse_df_origin(path, read_func)
-                df.columns = [str(i) for i in range(len(df.columns))]
-                self.model = PandasModel(df)
+                path = GT.path_dict[file]
+
+                shown_df, r, c = GT.shown_dfs[path]
+
+                self.model = PandasModel(shown_df)
                 self.proxy = QSortFilterProxyModel()
                 self.proxy.setSourceModel(self.model)
                 self.previewTable.setModel(self.proxy)
@@ -2087,18 +2016,19 @@ class Import_Settings(QDialog):
                 index_col = TG.path_kwargs[path]['index_col']
                 skiprows = TG.path_kwargs[path]['skiprows']
 
-                if index_col == 'Auto': index_col = c
                 if header == 'Auto': header = r
+                if index_col == 'Auto': index_col = c
+#                if skiprows == 'None': skiprows = None
 
                 if index_col is not None:
-                    for r in range(len(df.index)):
+                    for r in range(len(shown_df.index)):
                         self.model.setData(self.model.index(r,int(index_col)), QBrush(QColor.fromRgb(255, 170, 0)), Qt.BackgroundRole)
                 if header is not None:
-                    for c in range(len(df.columns)):
+                    for c in range(len(shown_df.columns)):
                         self.model.setData(self.model.index(int(header),c), QBrush(QColor.fromRgb(0, 170, 255)), Qt.BackgroundRole)
                 if skiprows is not None:
                     for r in skiprows:
-                        for c in range(len(df.columns)):
+                        for c in range(len(shown_df.columns)):
                             self.model.setData(self.model.index(r,c), QBrush(Qt.darkGray), Qt.BackgroundRole)
             else:
                 if hasattr(self, 'proxy'): self.proxy.deleteLater()
@@ -2138,7 +2068,371 @@ class Import_Settings(QDialog):
                         column = index.column() - columns[0]
                         model.setData(model.index(index.row(), index.column()), arr[column])
 
+        # Close dialog from escape key.
+        if event.key() == Qt.Key_Escape:
+            self.close()
+
+
+class Configure_Tab(QWidget):
+
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        DM = self.parent
+        TG = DM.parent
+        buttonBox = QGridLayout()
+        tableBox = QVBoxLayout(spacing=0)
+        grid = QHBoxLayout()
+
+        self.selectGroup = QComboBox()
+        self.selectGroup.addItems(self.parent.groups.keys())
+        self.selectGroup.currentIndexChanged.connect(self.display_header_info)
+        buttonBox.addWidget(self.selectGroup, 0, 0, 1, 2)
+
+        self.export = QPushButton('Export DataFrames')
+        self.export.clicked.connect(self.export_data)
+        buttonBox.addWidget(self.export, 1, 0, 1, 2)
+
+        self.settings = QPushButton('Unit Settings')
+        self.settings.clicked.connect(self.open_settings)
+        buttonBox.addWidget(self.settings, 2, 0, 1, 2)
+
+        self.reparse = QPushButton('Reparse Units')
+        self.reparse.clicked.connect(self.reparse_units)
+        buttonBox.addWidget(self.reparse, 3, 0, 1, 2)
+
+        self.hideUnused = QCheckBox('Hide Unused Headers')
+        self.hideUnused.setChecked(True)
+        self.hideUnused.stateChanged.connect(self.display_header_info)
+        buttonBox.addWidget(self.hideUnused, 4, 0, 1, 2)
+
+        density = QLabel('Plotting Density:')
+        buttonBox.addWidget(density, 5, 0)
+
+        self.density = QSpinBox()
+        self.density.setRange(0,100)
+        self.density.setSingleStep(5)
+        self.density.setValue(100)
+        self.density.setSuffix('%')
+        self.density.valueChanged.connect(self.update_density)
+        buttonBox.addWidget(self.density, 5, 1)
+
+        self.summary = QLabel()
+        buttonBox.addWidget(self.summary, 6, 0, 1, 2)
+
+        self.headerTable = QTableWidget()
+        self.headerTable.setRowCount(6)
+        self.headerTable.horizontalHeader().sectionResized.connect(self.sync_col_width)
+        self.headerTable.horizontalHeader().setFixedHeight(23)
+        self.headerTable.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.headerTable.setVerticalHeaderLabels(['Keep','Scale','Original Header','Alias','Unit Type','Unit'])
+        self.headerTable.verticalHeader().setFixedWidth(146)
+        self.headerTable.verticalHeader().setDefaultSectionSize(23)
+        self.headerTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.headerTable.setFixedHeight(163)
+        tableBox.addWidget(self.headerTable)
+
+        self.dfTable = QTableView()
+        self.dfTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dfTable.horizontalHeader().hide()
+        self.dfTable.horizontalScrollBar().valueChanged.connect(self.sync_scroll)
+        self.dfTable.verticalHeader().setDefaultSectionSize(self.dfTable.verticalHeader().minimumSectionSize())
+        self.dfTable.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.dfTable.verticalHeader().setFixedWidth(146)
+        tableBox.addWidget(self.dfTable)
+
+        grid.addLayout(buttonBox)
+        grid.addLayout(tableBox)
+        self.setLayout(grid)
+
+        if self.selectGroup.currentText():
+            self.display_header_info()
+            self.parent.modified = False
+
+    def update_density(self):
+        DM = self.parent
+        group_name = self.selectGroup.currentText()
+        DM.groups[group_name].density = self.density.value()
+        DM.modified = True
+
+    def reparse_units(self):
+        DM = self.parent
+        group_name = self.selectGroup.currentText()
+        DM.groups_tab.parse_group_units([group_name], update=True)
+
+    def export_data(self):
+        """Generate an Excel file for selected group, with only kept columns and aliases with units in square brackets."""
+        DM = self.parent
+        TG = DM.parent
+
+        savepath = str(QFileDialog.getExistingDirectory(self, "Save DataFrames"))
+
+        if savepath:
+            TG.save_dir = savepath  # store saving directory
+            group_name = self.selectGroup.currentText()
+            group = DM.groups[group_name]
+#                keep_cols = [header for header in group.data.columns if group.series[header].keep]
+            aliases = {}
+            for header in group.series:
+                if group.series[header].keep:
+                    alias = group.series[header].alias
+                    unit = group.series[header].unit
+                    if not alias: alias = header
+                    aliases[header] = ('{} [{}]'.format(alias, unit))
+            df = group.data.loc[:, list(aliases.keys())]
+            df.rename(columns=aliases, inplace=True)
+
+            filename = savepath + '/' + group_name + '.xlsx'
+            with pd.ExcelWriter(filename) as writer:
+                df.to_excel(writer)
+                DM.feedback('Exporting DataFrame to {}... '.format(savepath))
+                DM.messageLog.repaint()
+            DM.feedback('Done', mode='append')
+
+    def sync_scroll(self, idx):
+        self.headerTable.horizontalScrollBar().setValue(idx)
+
+    def sync_col_width(self, col, old_size, new_size):
+        self.dfTable.horizontalHeader().resizeSection(col, new_size)
+
+    def days_hours_minutes(self, timedelta):
+        return timedelta.days, timedelta.seconds//3600, (timedelta.seconds//60)%60
+
+    def df_span_info(self, df):
+        start = min(df.index)
+        end = max(df.index)
+        totalspan = self.days_hours_minutes(end - start)
+        timeinterval = 0; i = 1
+        while timeinterval == 0:
+            timeinterval = (df.index[i]-df.index[i-1]).total_seconds()
+            i += 1
+        return df.shape, start, end, totalspan, timeinterval
+
+    def populate_headerTable(self, group):
+        DM = self.parent
+        TG = DM.parent
+        i = 0
+        for header in group.series:
+            keep = group.series[header].keep
+            if self.hideUnused.isChecked():
+                if not keep: continue
+            alias = group.series[header].alias
+            unit = group.series[header].unit
+            unit_type = group.series[header].unit_type #TG.get_unit_type(unit)
+
+            keep_check = QCheckBox()
+            keep_check.setChecked(keep)
+            keep_check.setProperty("col", i)
+            keep_check.stateChanged.connect(self.update_keep)
+            _widget = QWidget()
+            _layout = QHBoxLayout(_widget)
+            _layout.addWidget(keep_check)
+            _layout.setAlignment(Qt.AlignCenter)
+            _layout.setContentsMargins(0,0,0,0)
+            self.headerTable.setCellWidget(0, i, _widget)
+
+            self.headerTable.setItem(1, i, QTableWidgetItem(str(group.series[header].scale)))
+
+            item = QTableWidgetItem(header)
+            item.setFlags(Qt.ItemIsSelectable)
+            self.headerTable.setItem(2, i, item)
+
+            self.headerTable.setItem(3, i, QTableWidgetItem(alias))
+
+            type_combo = QComboBox()
+            if TG.default_type: type_combo.addItem(TG.default_type)
+            type_combo.addItem(None)
+            type_combo.addItems(list(TG.user_units.keys()))
+            type_combo.addItems(list(TG.unit_dict.keys()))
+            type_combo.setCurrentText(unit_type)
+            type_combo.setProperty("col", i)
+            type_combo.currentIndexChanged.connect(self.update_unit_combo)
+            self.headerTable.setCellWidget(4, i, type_combo)
+
+            unit_combo = QComboBox()
+            if unit_type is not None:
+                if unit_type in TG.user_units:
+                    unit_combo.addItems(list(TG.user_units[unit_type]))
+                elif unit_type in TG.unit_dict:
+                    unit_combo.addItems(list(TG.unit_dict[unit_type]))
+                else:
+                    if TG.default_unit: unit_combo.addItem(TG.default_unit)
+            else:
+                if TG.default_unit: unit_combo.addItem(TG.default_unit)
+
+            unit_combo.setCurrentText(unit)
+            unit_combo.setProperty("col", i)
+            unit_combo.currentIndexChanged.connect(self.update_series_unit)
+            self.headerTable.setCellWidget(5, i, unit_combo)
+            i += 1
+
+    def populate_dfTable(self, group, df):
+        shownRows = 20
+        if len(df.index) > shownRows:
+            upper_df = df.head(shownRows//2)
+            lower_df = df.tail(shownRows//2)
+            if self.hideUnused.isChecked():
+                upper_df = upper_df.loc[:,[header for header in group.series if group.series[header].keep]]
+                lower_df = lower_df.loc[:,[header for header in group.series if group.series[header].keep]]
+
+            ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                    index=upper_df.columns,
+                                    columns=['...']).T
+            shown_df = upper_df.append(ellipses).append(lower_df)
+        else:
+            if self.hideUnused.isChecked():
+                shown_df = df.loc[:,[header for header in group.series if group.series[header].keep]]
+            else:
+                shown_df = df
+        shown_df.index = [ts.strftime('%Y-%m-%d  %H:%M:%S') if hasattr(ts, 'strftime') else '...' for ts in shown_df.index]
+
+        self.model = PandasModel(shown_df)
+        self.proxy = QSortFilterProxyModel()
+        self.proxy.setSourceModel(self.model)
+        self.dfTable.setModel(self.proxy)
+        self.headerTable.setColumnCount(len(shown_df.columns))
+
+    def summarize_data(self, df):
+        shape, start, end, total_span, sampling_rate = self.df_span_info(df)
+        self.summary.setText("""
+Shape:
+    {} rows
+    {} columns
+
+Data Start:
+    {}
+
+Data End:
+    {}
+
+Total Span:
+    {} days
+    {} hours
+    {} minutes
+
+Sampling Rate:
+    {}s
+""".format(*shape, start.strftime('%Y-%m-%d  %H:%M:%S'), end.strftime('%Y-%m-%d  %H:%M:%S'), *total_span, sampling_rate))
+
+    def display_header_info(self):
+        try:
+            self.headerTable.cellChanged.disconnect(self.update_alias_scale)
+        except TypeError:
+            pass
+        TG = self.parent.parent
+        DM = self.parent
+        group_name = self.selectGroup.currentText()
+        if group_name:
+            group = DM.groups[group_name]
+            self.density.setValue(group.density)
+            df = group.data
+            self.summarize_data(df)
+            self.populate_dfTable(group, df)
+            self.headerTable.setRowCount(6)
+            self.headerTable.setVerticalHeaderLabels(['Keep','Scale','Original Header','Alias','Unit Type','Unit'])
+            self.populate_headerTable(group)
+        else:
+            self.headerTable.clear()
+            self.headerTable.setRowCount(0)
+            self.headerTable.setColumnCount(0)
+            if hasattr(self, 'proxy'): self.proxy.deleteLater()
+        self.headerTable.cellChanged.connect(self.update_alias_scale)
+
+    def update_alias_scale(self, row, column):
+        """Updates the alias and scaling factor of series when one of those two fields is edited"""
+        DM = self.parent
+        group = DM.groups[self.selectGroup.currentText()]
+        header = self.headerTable.item(2, column).text()
+        if row == 3:
+            alias = self.headerTable.item(3, column).text().strip()  # remove any trailing/leading whitespace
+
+            def remove_key_by_value(dictionary, value):
+                for key in dictionary:
+                    if dictionary[key] == value:
+                        del dictionary[key]
+                        break
+
+            if alias:
+                if alias in group.alias_dict:
+                    DM.feedback('Alias \"{}\" is already in use. Please choose a different alias.'.format(alias))
+                    self.headerTable.blockSignals(True)
+                    self.headerTable.setItem(3, column, QTableWidgetItem(group.series[header].alias))
+                    self.headerTable.blockSignals(False)
+                    return
+                if alias in group.data.columns:
+                    DM.feedback('Alias \"{}\" is the name of an original header. Please choose a different alias.'.format(alias))
+                    self.headerTable.blockSignals(True)
+                    self.headerTable.setItem(3, column, QTableWidgetItem(group.series[header].alias))
+                    self.headerTable.blockSignals(False)
+                    return
+                group.series[header].alias = alias
+                remove_key_by_value(group.alias_dict, header)
+                group.alias_dict[alias] = header
+            else:
+                group.series[header].alias = ''
+                remove_key_by_value(group.alias_dict, header)
+            DM.modified = True
+        elif row == 1:
+            scale = self.headerTable.item(1, column).text()
+            try:
+                scale = float(scale)
+                if scale == 0: raise ValueError
+                group.series[header].scale = scale
+                DM.modified = True
+            except ValueError:
+                DM.feedback('\"{}\" is not a valid scaling factor. Only nonzero real numbers permitted.'.format(scale))
+            self.headerTable.blockSignals(True)  # prevents infinite recursion when setItem would call this function again
+            self.headerTable.setItem(1, column, QTableWidgetItem(str(group.series[header].scale)))
+            self.headerTable.blockSignals(False)
+
+    def update_unit_combo(self):
+        DM = self.parent
+        TG = DM.parent
+        group = DM.groups[self.selectGroup.currentText()]
+        type_combo = QObject.sender(self)
+        col = type_combo.property("col")
+        unit_type = type_combo.currentText()
+        header = self.headerTable.item(2, col).text()
+        group.series[header].unit_type = unit_type
+        unit_combo = self.headerTable.cellWidget(5, col)
+        unit_combo.clear()
+        try:
+            if unit_type in TG.user_units:
+                unit_combo.addItems(list(TG.user_units[unit_type]))
+            else:
+                unit_combo.addItems(list(TG.unit_dict[unit_type]))
+        except KeyError:
+            if TG.default_unit: unit_combo.addItem(TG.default_unit)
+        DM.modified = True
+
+    def update_series_unit(self):
+        DM = self.parent
+        group = DM.groups[self.selectGroup.currentText()]
+        unit_combo = QObject.sender(self)
+        col = unit_combo.property("col")
+        unit = unit_combo.currentText()
+        header = self.headerTable.item(2, col).text()
+        group.series[header].unit = unit
+        DM.modified = True
+
+    def update_keep(self):
+        DM = self.parent
+        group = DM.groups[self.selectGroup.currentText()]
+        keep_check = QObject.sender(self)
+        col = keep_check.property("col")
+        header = self.headerTable.item(2, col).text()
+        group.series[header].keep = keep_check.isChecked()
+        self.display_header_info()
+        DM.modified = True
+
+    def open_settings(self):
+        self.settings_dialog = Unit_Settings(self)
+        self.settings_dialog.setModal(True)
+        self.settings_dialog.show()
+
+
 class PandasModel(QStandardItemModel):
+
     def __init__(self, data, parent=None):
         QStandardItemModel.__init__(self, parent)
         self._data = data
@@ -2160,42 +2454,186 @@ class PandasModel(QStandardItemModel):
             return self._data.index[x]
         return None
 
+
 class Unit_Settings(QDialog):
+
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        TG = self.parent.parent.parent  # sheesh man
+        self.setWindowTitle('Unit Settings')
+#        self.setFixedSize(200,333)
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
 
-        self.set_defaults = {}
-#        self.unit_types = [
-#                'Position',
-#                'Velocity',
-#                'Acceleration',
-#                'Angle',
-#                'Temperature',
-#                'Pressure',
-#                'Heat',
-#                'Voltage',
-#                'Current',
-#                'Resistance',
-#                'Force',
-#                'Torque',
-#                'Power',
-#                ]
-        self.grid = QGridLayout()
+        vbox = QVBoxLayout()
 
-        units = [u for u in TG.unit_dict.keys() if u is not None]
-        for i,u in enumerate(units):
-            self.set_defaults[i] = QComboBox()
-            self.set_defaults[i].addItems(TG.unit_dict[u])
-#            self.set_defaults[i].setCurrentText(TG.unit_defaults[u])
-            self.grid.addWidget(QLabel(u), i, 0)
-            self.grid.addWidget(self.set_defaults[i], i, 1)
+        form = QFormLayout()
+        self.autoParseCheck = QCheckBox('Automatically parse units from headers')
+        self.autoParseCheck.setChecked(TG.auto_parse)
+        self.autoParseCheck.stateChanged.connect(self.toggle_auto_parse)
+        form.addRow(self.autoParseCheck)
 
-        self.setLayout(self.grid)
+        self.baseType = QComboBox()
+        self.baseType.addItems(list(TG.unit_dict.keys()))
+        self.baseType.currentIndexChanged.connect(self.update_pht)
+        form.addRow('Base Unit Types', self.baseType)
+
+        self.newType = QLineEdit()
+        baseType = self.baseType.currentText()
+        self.newType.setPlaceholderText('New '+baseType+' Type')
+        self.newType.editingFinished.connect(self.add_user_type)
+        form.addRow(self.newType)
+        self.userUnits = QComboBox()
+        entries = []
+        for userType in TG.user_units:
+            for baseType in TG.unit_dict:
+                if TG.user_units[userType] == TG.unit_dict[baseType]:
+                    entries.append('{} ({})'.format(userType, baseType))
+                    break
+        self.userUnits.addItems(entries)
+        self.delete = QPushButton('Delete User Type')
+        self.delete.clicked.connect(self.delete_user_type)
+        form.addRow(self.delete, self.userUnits)
+        self.defaultType = QLineEdit()
+        self.defaultType.setPlaceholderText('None')
+        if TG.default_type: self.defaultType.setText(TG.default_type)
+        form.addRow('Set Default Type', self.defaultType)
+        self.defaultUnit = QLineEdit()
+        self.defaultUnit.setPlaceholderText('None')
+        if TG.default_unit: self.defaultUnit.setText(TG.default_unit)
+        form.addRow('Set Default Unit', self.defaultUnit)
+        vbox.addLayout(form)
+
+        self.clarified = QTableWidget()
+        self.clarified.setColumnCount(2)
+        self.clarified.setHorizontalHeaderLabels(['Parsed', 'Interpreted'])
+        self.clarified.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.clarified.verticalHeader().hide()
+        self.populate_clarified()
+        vbox.addWidget(self.clarified)
+
+        hbox = QHBoxLayout()
+        self.addRow = QPushButton('Add')
+        self.addRow.clicked.connect(self.add_clarified_row)
+        self.addRow.setDefault(True)
+        hbox.addWidget(self.addRow)
+        self.deleteRow = QPushButton('Delete')
+        self.deleteRow.clicked.connect(self.delete_clarified_row)
+        hbox.addWidget(self.deleteRow )
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+
+    def toggle_auto_parse(self):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        TG.auto_parse = self.autoParseCheck.isChecked()
+
+    def update_pht(self):
+        baseType = self.baseType.currentText()
+        self.newType.setPlaceholderText('New '+baseType+' Type')
+
+    def add_user_type(self):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        newType = self.newType.text().strip()
+        baseType = self.baseType.currentText()
+        all_units = {**TG.unit_dict, **TG.user_units}
+        if newType and newType not in all_units:
+            TG.user_units.update({newType: TG.unit_dict[baseType]})
+            entry = '{} ({})'.format(newType, baseType)
+            self.userUnits.addItem(entry)
+            self.userUnits.setCurrentText(entry)
+
+    def delete_user_type(self):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        entry = self.userUnits.currentText()
+        userType = entry[:entry.rindex('(')-1]
+        del TG.user_units[userType]
+        self.userUnits.removeItem(self.userUnits.currentIndex())
+
+    def populate_clarified(self):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        self.clarified.setRowCount(len(TG.unit_clarify))
+        for r, key in enumerate(TG.unit_clarify):
+            self.clarified.setItem(r, 0, QTableWidgetItem(key))
+            key_clar = QComboBox()
+            key_clar.addItems([x for unit_list in TG.unit_dict.values() for x in unit_list])
+            key_clar.setCurrentText(TG.unit_clarify[key])
+            self.clarified.setCellWidget(r, 1, key_clar)
+
+    def add_clarified_row(self):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        self.clarified.setRowCount(self.clarified.rowCount()+1)
+        key_clar = QComboBox()
+        key_clar.addItems([x for unit_list in TG.unit_dict.values() for x in unit_list])
+        self.clarified.setCellWidget(self.clarified.rowCount()-1, 1, key_clar)
+
+    def delete_clarified_row(self):
+        rows_to_delete = set([item.row() for item in self.clarified.selectedIndexes()])
+        for r in sorted(rows_to_delete, reverse=True):
+            self.clarified.removeRow(r)
+
+    def closeEvent(self, event):
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        keys, values = [], []
+        ok = True
+        for r in range(self.clarified.rowCount()):
+            try:
+                key = self.clarified.item(r, 0).text()
+                if key.strip():
+                    if key not in keys:
+                        keys.append(key)
+                        values.append(self.clarified.cellWidget(r, 1).currentText())
+                    else:
+                        self.clarified.item(r,0).setBackground(QBrush(QColor.fromRgb(255, 50, 50)))
+                        ok = False
+            except AttributeError:
+                continue
+        if ok:
+            TG.unit_clarify = dict(zip(keys,values))
+            default_type = self.defaultType.text().strip()
+            if default_type:
+                TG.default_type = default_type
+            else:
+                TG.default_type = None
+            default_unit = self.defaultUnit.text().strip()
+            if default_unit:
+                TG.default_unit = default_unit
+            else:
+                TG.default_unit = None
+
+            TG.figure_settings.update_unit_table()
+
+            group_name = CT.selectGroup.currentText()
+            if group_name:
+                group = DM.groups[group_name]
+                DM.configure_tab.populate_headerTable(group)
+
+            event.accept()
+        else:
+            event.ignore()
+
+    def keyPressEvent(self, event):
+        """Close dialog from escape key."""
+        if event.key() == Qt.Key_Escape:
+            self.close()
+
 
 class Subplot_Manager():
     """Wrapper around subplot object (host). Keeps track of contents and settings of each subplot."""
+
     def __init__(self, parent, host, contents={}, order=[None], index=None, legend=False, colorCoord=False):
         self.parent = parent
         self.axes = [host]  # keeps track of parasitic axes
@@ -2212,10 +2650,10 @@ class Subplot_Manager():
         """see https://matplotlib.org/gallery/ticks_and_spines/multiple_yaxis_with_spines.html"""
         ax.set_frame_on(True)
         ax.patch.set_visible(False)
-        for sp in ax.spines.values():
-            sp.set_visible(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
-    def plot(self, verbose=True):
+    def plot(self, skeleton=False):
         """Main plotting function. Auto-generates parasitic axes in specified unit order."""
         sp = self
         TG = self.parent
@@ -2230,55 +2668,81 @@ class Subplot_Manager():
         lines = []
         labels = []
         if sp.contents is not None:
-            for group, aliases_units in sp.contents.items():
-                df = TG.groups[group].data
+            for group_name, aliases_units in sp.contents.items():
+                group = TG.groups[group_name]
+                df = group.data
                 subdf = df[(df.index >= CF.start) & (df.index <= CF.end)]  # filter by start/end time
                 for alias, unit in aliases_units.items():
+                    try:
+                        header = group.alias_dict[alias]
+                    except KeyError:
+                        header = alias
+                    unit_type = group.series[header].unit_type
+#                    print('alias: ', alias)
+#                    print('unit:  ', unit)
+#                    print('order: ', sp.order)
 
                     # Determine which axes to plot on, depending on sp.order
+                    # Axes are uniquely identified by combination of unit_type and unit
+                    # ie, Position [nm] != Position [km] != Altitude [km] != Altitude [nm]
                     if sp.order[0] is None:
-                        sp.order[0] = unit  # if no order given, default to sorted order
-                    if unit not in sp.order:
-                        sp.order.append(unit)  # new units go at the end of the order
-                    ax_index = sp.order.index(unit)  # get index of unit in unit order
+                        sp.order[0] = (unit_type, unit)  # if no order given, default to sorted order
+                    if (unit_type, unit) not in sp.order:
+                        sp.order.append((unit_type, unit))  # new units go at the end of the order
+                    ax_index = sp.order.index((unit_type, unit))  # get index of unit in unit order
                     while len(sp.axes)-1 < ax_index: # extend sp.axes as needed
                         par = sp.host().twinx()
                         sp.axes.append(par)
                     ax = sp.axes[ax_index]  # get axis (parasitic or host) at index of unit
 
                     # Manage colors and styles
-                    unit_type = TG.get_unit_type(unit)
-                    if sp.colorCoord:
-                        if unit_type not in style_dict:  # keep track of how many series are plotted in each unit to cycle through linestyles(/markerstyles TBI)
-                            style_dict[unit_type] = 0
-                        style_counter = style_dict[unit_type]
-                        style_dict[unit_type] = style_counter+1
-                        style = TG.markers[style_counter%len(TG.markers)]
-                        color = TG.color_dict[unit_type]
-                        ax.yaxis.label.set_color(color)
-                    else:  # set color to rotate through default colormap (otherwise colormap is done per axis, not the whole subplot)
-                        color='C'+str(color_index%10)
-                        color_index += 1
-                        style = 'o'
-                        ax.yaxis.label.set_color('k')
+                    if not skeleton:  # turning skeleton on sets up the axes correctly but doesn't plot any data. Helps efficiency in series transfer/clear
+                        if sp.colorCoord:
+                            if unit_type not in style_dict:  # keep track of how many series are plotted in each unit to cycle through linestyles(/markerstyles TBI)
+                                style_dict[unit_type] = 0
+                            style_counter = style_dict[unit_type]
+                            style_dict[unit_type] = style_counter+1
+                            style = FS.markers[style_counter%len(FS.markers)]
+                            color = FS.color_dict[unit_type]
+                            ax.yaxis.label.set_color(color)
+                            ax.tick_params(axis='y', labelcolor=color)
+                        else:  # set color to rotate through default colormap (otherwise colormap is done per axis, not the whole subplot)
+                            color='C'+str(color_index%10)
+                            color_index += 1
+                            style = 'o'
+                            ax.yaxis.label.set_color('k')
+                            ax.tick_params(axis='y', labelcolor='k')
 
-                    # Fetch data to plot from references in sp.contents
-                    try:
-                        header = TG.groups[group].alias_dict[alias]
-                    except KeyError:
-                        header = alias
-                    scale = TG.groups[group].series[header].scale
-                    data = [x*scale for x in subdf[header]]
-                    timestamp = subdf.index
-                    line, = ax.plot(timestamp, data,
-                                    style, color=color, markersize=CF.dotsize, markeredgewidth=CF.dotsize, linestyle='None')
-                    lines.append(line)
-                    labels.append(alias)
-                    if unit_type is not None:  # if no units, leave axis unlabeled
-                        ax.set_ylabel('{} [{}]'.format(unit_type, unit), fontsize=FS.labelSize.value())  # set ylabel to formal unit description
+                        # Fetch data to plot from references in sp.contents
+                        s = subdf[header]
+                        n = len(s.index)
+                        d = group.density/100
+                        thin = np.linspace(0, n-1, num=int(n*d), dtype=int)
+                        s = s.iloc[thin]
+
+                        scale = group.series[header].scale
+                        s = s.map(lambda x: x*scale)
+
+                        if FS.scatter.isChecked():
+                            line, = ax.plot(s,
+                                            style, color=color, markersize=FS.dotsize.value(), markeredgewidth=FS.dotsize.value(), linestyle='None')
+                        else:
+                            line, = ax.plot(s,
+                                            color=color)
+                        lines.append(line)
+                        labels.append(alias)
+                        # set ylabel to formal unit description
+                        if unit_type is not None:
+                            if unit:
+                                ax.set_ylabel('{} [{}]'.format(unit_type, unit), fontsize=FS.labelSize.value())
+                            else:
+                                ax.set_ylabel(unit_type, fontsize=FS.labelSize.value())
+                        else:
+                            if unit:
+                                ax.set_ylabel('[{}]'.format(unit), fontsize=FS.labelSize.value())
 
             offset = FS.parOffset.value()
-            for i,par in enumerate(sp.axes[1:]):  # offset parasitic axes
+            for i, par in enumerate(sp.axes[1:]):  # offset parasitic axes
                 self.make_patch_spines_invisible(par)
                 par.spines["right"].set_visible(True)
                 par.spines["right"].set_position(("axes", 1+offset*(i)))
@@ -2286,17 +2750,21 @@ class Subplot_Manager():
             npars = len(sp.axes[1:])
             if sp.legend and sp.contents:  # create and offset legend
                 sp.host().legend(lines, labels,
-                       bbox_to_anchor=(1+offset*npars, .5),
+                       bbox_to_anchor=(1+offset*npars, 0.5),
                        loc="center left", markerscale=10)
 
+
 class Group():
-    def __init__(self, df, source_files, source_paths):
+
+    def __init__(self, df, source_files, source_paths, density=100):
         self.data = df  # maybe copy needed
-        self.series = {key:Series() for key in self.data.columns}  # import as 1 to 1 header:alias
+        self.series = {key:Series() for key in self.data.columns}
         self.alias_dict = {}
+        self.density = density
         self.source_files = source_files
         self.source_paths = source_paths
-#EG: TG.groups[name].series['mySeries'].alias
+#EG: TG.groups[name].series[header].alias
+
     def summarize(self):
         print('Source Paths')
         for path in self.source_paths:
@@ -2309,9 +2777,11 @@ class Group():
 
 
 class Series():
-    def __init__(self, alias='', unit=None, scale=1.0, keep=True):
+
+    def __init__(self, alias='', unit=None, unit_type=None, scale=1.0, keep=True):
         self.alias = alias
         self.unit = unit
+        self.unit_type = unit_type
         self.scale = scale
         self.keep = keep
 
