@@ -2109,11 +2109,11 @@ class Configure_Tab(QWidget):
         grid = QHBoxLayout()
 
         self.selectGroup = QComboBox()
-        self.selectGroup.addItems(self.parent.groups.keys())
+        self.selectGroup.addItems(TG.groups.keys())
         self.selectGroup.currentIndexChanged.connect(self.display_header_info)
         buttonBox.addWidget(self.selectGroup, 0, 0, 1, 2)
 
-        self.export = QPushButton('Export DataFrames')
+        self.export = QPushButton('Export DataFrame')
         self.export.clicked.connect(self.export_data)
         buttonBox.addWidget(self.export, 1, 0, 1, 2)
 
@@ -2189,7 +2189,7 @@ class Configure_Tab(QWidget):
         DM = self.parent
         TG = DM.parent
 
-        savepath = str(QFileDialog.getExistingDirectory(self, "Save DataFrames"))
+        savepath = str(QFileDialog.getExistingDirectory(self, "Save DataFrame as CSV"))
 
         if savepath:
             TG.save_dir = savepath  # store saving directory
