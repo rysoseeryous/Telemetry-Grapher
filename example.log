@@ -1,0 +1,34 @@
+ERROR:__main__:too many chairs in here.
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
+    raise Exception
+Exception
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
+    raise Exception
+Exception
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
+    raise Exception
+Exception
+ERROR:__main__:too many chairs in here.
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 299, in open_fig
+    raise Exception
+Exception
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 2183, in reparse_units
+    DM.groups_tab.parse_group_units([group_name], update=True)
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 1819, in parse_group_units
+    group = DM.groups[group_name]
+KeyError: ''
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 2195, in export_data
+    group = DM.groups[group_name]
+KeyError: ''

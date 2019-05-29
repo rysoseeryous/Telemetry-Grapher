@@ -10,14 +10,13 @@ import csv
 import os
 import re
 import copy
+import json
+import logging
 #import warnings
 import datetime as dt
 import itertools
 import math
 import functools
-
-import xlrd
-import unicodecsv
 
 #from PyQt5.QtWidgets import QMainWindow, QAction, QDockWidget, QWidget, QVBoxLayout, QApplication, QDesktopWidget, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QDialog, QTabWidget
 from PyQt5.QtWidgets import *
@@ -35,6 +34,19 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 ### THE RUN COMMAND IS AT THE BOTTOM. YOU CAN JUST HIT RUN ON THIS SCRIPT.
 
+# Allows logging of unhandled exceptions
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='example.log', filemode='w', level=logging.DEBUG)
+
+def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
+    """Handler for unhandled exceptions that will write to the logs"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        # call the default excepthook saved at __excepthook__
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_unhandled_exception
 
 class Telemetry_Grapher(QMainWindow):
     """Main application window."""
@@ -47,32 +59,14 @@ class Telemetry_Grapher(QMainWindow):
         self.path_kwargs = {}
         self.auto_parse = True
 
-        # dictionary of supported unit types
-        self.unit_dict = {
-                'Position':['nm','μm','mm','cm','m'],
-                'Velocity':['mm/s','cm/s','m/s'],
-                'Acceleration':['mm/s^2','m/s^2'],  # check how superscripts are parsed
-                'Angle':['deg','rad'],
-                'Temperature':['°C','°F','K'],
-                'Pressure':['mPa','Pa','kPa','MPa','GPa','mbar','bar','kbar','atm','psi','ksi'],
-                'Energy':['mJ','J','kJ'],
-                'Voltage':['mV','V','kV','MV'],
-                'Current':['mA','A','kA'],
-                'Resistance':['mΩ','Ω','kΩ','MΩ'],
-                'Force':['mN','N','kN'],
-                'Torque':['Nmm','Nm','kNm'],
-                'Power':['mW','W','kW'],
-                }
-        # try to map parsed unit through this dict before comparing to TG unit_dict
-        self.unit_clarify = {
-                'degC':'°C',
-                'degF':'°F',
-                'C':'°C',
-                'F':'°F',
-                }
-        self.user_units = {}
-        self.default_type = None
-        self.default_unit = None
+        # Read settings from config file
+        with open('unit_config.json', 'r', encoding='utf-8') as f:
+            startup = json.load(f)
+        self.unit_dict = startup['unit_dict']
+        self.unit_clarify = startup['unit_clarify']
+        self.user_units = startup['user_units']
+        self.default_type = startup['default_type']
+        self.default_unit = startup['default_unit']
 
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('satellite.png'))
@@ -254,6 +248,27 @@ class Telemetry_Grapher(QMainWindow):
 #                pkl.dump(AF.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(savepath))
 
+    def parse_unit(self, header):
+        """Returns last instance in header of one or more characters between square brackets."""
+        regex = re.compile('\[.+?\]')  # matches any characters between square brackets (but not empty [])
+        parsed = None
+        for match in re.finditer(regex, header):  # parsed ends up as last match
+            parsed = match.group(0)[1:-1]  # unit without the brackets
+        return parsed
+
+    def interpret_unit(self, unit):
+        """Tries to interpret unit.
+        - Find last instance of one or more characters between square brackets -> unit.
+        - Run unit through TG.unit_clarify dictionary.
+        - Check if unit can be associated with a unit type (see TG.get_unit_type).
+        - If so, return unit, otherwise return default unit."""
+        if unit:
+            if unit in self.unit_clarify:
+                unit = self.unit_clarify[unit]
+            if self.get_unit_type(unit) != self.default_type:
+                return unit
+        return self.default_unit
+
     def get_unit_type(self, unit):
         """Returns unit type of given unit.
         Priority is first given to user-defined units, then base unit types.
@@ -277,9 +292,11 @@ class Telemetry_Grapher(QMainWindow):
         event.accept()
 
     def new(self):
+        logger.error('too many chairs in here.')
         pass
 
     def open_fig(self):
+        raise Exception
         pass
 #        print(self.figure_settings.unit_table.size())
 #        print(self.figure_settings.majorXgrid.isChecked())
@@ -1658,26 +1675,6 @@ class Groups_Tab(QWidget):
                     pass
         return None, None
 
-    def parse_unit(self, header):
-        """Tries to parse unit from column header.
-        - Find last instance of one or more characters between square brackets -> unit.
-        - Run unit through TG.unit_clarify dictionary.
-        - Check if unit can be associated with a unit type (see TG.get_unit_type).
-        - If so, return unit, otherwise return default unit."""
-        DM = self.parent
-        TG = DM.parent
-        regex = re.compile('\[.+?\]')  # matches any characters between square brackets (but not empty [])
-        parsed = None
-        for parsed in re.finditer(regex, header):  # parsed ends up as last match
-            pass
-        if parsed:
-            parsed = parsed.group(0)[1:-1]  # return parsed unit without the brackets
-            if parsed in TG.unit_clarify:
-                parsed = TG.unit_clarify[parsed]
-            if TG.get_unit_type(parsed) != TG.default_type:
-                return parsed
-        return TG.default_unit
-
     def floatify(self, data):
         """Strips data down to float.
         - Try to return data as float.
@@ -1822,10 +1819,11 @@ class Groups_Tab(QWidget):
             group = DM.groups[group_name]
             for header in group.series:
                 header = str(header)
-                parsed = self.parse_unit(header)
-                group.series[header].unit = parsed
-                group.series[header].unit_type = TG.get_unit_type(parsed)
-                if parsed is None:
+                parsed = TG.parse_unit(header)
+                unit = TG.interpret_unit(parsed)
+                group.series[header].unit = unit
+                group.series[header].unit_type = TG.get_unit_type(unit)
+                if not unit:
                     report += header + '\n'
                 else:
                     alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
@@ -1971,6 +1969,7 @@ class Import_Settings(QDialog):
 
         ### input permissions
         # NO INPUT CONTROL ON FORMAT FIELD, SO YOU BETTER KNOW WHAT YOU'RE DOING
+        self.kwargTable.blockSignals(True)
         if kwarg == 'format':
             value = text
         elif kwarg in ('header', 'index_col'):
@@ -1980,31 +1979,27 @@ class Import_Settings(QDialog):
                 value = 'Auto'
             else:
                 DM.feedback('Only integers or \"Auto\" allowed.')
-                self.kwargTable.blockSignals(True)
                 self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
-                self.kwargTable.blockSignals(False)
                 return
         elif kwarg == 'skiprows':
             if text == 'None':
-                value = None
+                value = []
             else:
                 value = []
                 for i in text:
-                    if i.isdigit() and i not in value:  # admit only unique digits
-                        if int(i) != 0: value.append(int(i))  # silently disallow zero
+#                    limit = TG.path_kwargs[path]['header']
+#                    if limit == 'Auto'
+                    if i.isdigit() and int(i) not in value:# and int(i) > :
+                         value.append(int(i))
                     elif i in ', []':  # ignore commas, spaces, and brackets
                         continue
                     else:
-                        DM.feedback('Only list of unique nonzero integers or \"None\" allowed.')
-                        self.kwargTable.blockSignals(True)
+#                        DM.feedback('Only list of unique nonzero integers or \"None\" allowed.')
                         self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
-                        self.kwargTable.blockSignals(False)
                         return
-            self.kwargTable.blockSignals(True)
-            self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
-            self.kwargTable.blockSignals(False)
+                    value = sorted(value)
+            if not value: value = None
 
-        self.kwargTable.blockSignals(True)
         self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
         self.kwargTable.blockSignals(False)
         TG.path_kwargs[path][kwarg] = value
@@ -2048,6 +2043,9 @@ class Import_Settings(QDialog):
                     for r in range(len(shown_df.index)):
                         self.model.setData(self.model.index(r,int(index_col)), QBrush(QColor.fromRgb(255, 170, 0)), Qt.BackgroundRole)
                 if header is not None:
+                    for r in range(int(header)):
+                        for c in range(len(shown_df.columns)):
+                            self.model.setData(self.model.index(r,c), QBrush(Qt.darkGray), Qt.BackgroundRole)
                     for c in range(len(shown_df.columns)):
                         self.model.setData(self.model.index(int(header),c), QBrush(QColor.fromRgb(0, 170, 255)), Qt.BackgroundRole)
                 if skiprows is not None:
@@ -2189,35 +2187,32 @@ class Configure_Tab(QWidget):
         DM = self.parent
         TG = DM.parent
 
-        savepath = str(QFileDialog.getExistingDirectory(self, "Save DataFrame as CSV"))
+        group_name = self.selectGroup.currentText()
+        if group_name:
+            savepath = str(QFileDialog.getExistingDirectory(self, "Save DataFrame as CSV"))
+            if savepath:
+                TG.save_dir = savepath  # store saving directory
+                group = DM.groups[group_name]
+                aliases = {}
+                for header in group.series:
+                    if group.series[header].keep:
+                        alias = group.series[header].alias
+                        unit = group.series[header].unit
+                        if not alias:
+                            alias = re.sub('\[{}\]'.format(unit), '', header).strip()
+                        aliases[header] = ('{} [{}]'.format(alias, unit))
+                df = group.data.loc[:, list(aliases.keys())]
+                df.rename(columns=aliases, inplace=True)
 
-        if savepath:
-            TG.save_dir = savepath  # store saving directory
-            group_name = self.selectGroup.currentText()
-            group = DM.groups[group_name]
-#                keep_cols = [header for header in group.data.columns if group.series[header].keep]
-            aliases = {}
-            for header in group.series:
-                if group.series[header].keep:
-                    alias = group.series[header].alias
-                    unit = group.series[header].unit
-                    if not alias:
-                        alias = re.sub('\[{}\]'.format(unit), '', header).strip()
-                    aliases[header] = ('{} [{}]'.format(alias, unit))
-            df = group.data.loc[:, list(aliases.keys())]
-            df.rename(columns=aliases, inplace=True)
-
-            filename = savepath + '/' + group_name + '.csv'
-#            with pd.ExcelWriter(filename) as writer:
-#                df.to_excel(writer)
-            DM.feedback('Exporting DataFrame to {}... '.format(savepath))
-            DM.messageLog.repaint()
-            try:
-                with open(filename, 'w') as f:
-                    df.to_csv(f, encoding='utf-8-sig')
-                DM.feedback('Done', mode='append')
-            except PermissionError:
-                DM.feedback('Permission denied. File {} is already open or is read-only.'.format(group_name + '.csv'))
+                filename = savepath + '/' + group_name + '.csv'
+                DM.feedback('Exporting DataFrame to {}... '.format(savepath))
+                DM.messageLog.repaint()
+                try:
+                    with open(filename, 'w') as f:
+                        df.to_csv(f, encoding='utf-8-sig')
+                    DM.feedback('Done', mode='append')
+                except PermissionError:
+                    DM.feedback('Permission denied. File {} is already open or is read-only.'.format(group_name + '.csv'))
 
     def sync_scroll(self, idx):
         self.headerTable.horizontalScrollBar().setValue(idx)
@@ -2382,7 +2377,7 @@ Sampling Rate:
                         del dictionary[key]
                         break
 
-            if alias:
+            if alias and alias != group.series[header].alias:
                 if alias in group.alias_dict:
                     DM.feedback('Alias \"{}\" is already in use. Please choose a different alias.'.format(alias))
                     self.headerTable.blockSignals(True)
@@ -2426,13 +2421,12 @@ Sampling Rate:
         group.series[header].unit_type = unit_type
         unit_combo = self.headerTable.cellWidget(5, col)
         unit_combo.clear()
-        try:
-            if unit_type in TG.user_units:
-                unit_combo.addItems(list(TG.user_units[unit_type]))
-            else:
-                unit_combo.addItems(list(TG.unit_dict[unit_type]))
-        except KeyError:
-            if TG.default_unit: unit_combo.addItem(TG.default_unit)
+        if unit_type in TG.user_units:
+            unit_combo.addItems(list(TG.user_units[unit_type]))
+        elif unit_type in TG.unit_dict:
+            unit_combo.addItems(list(TG.unit_dict[unit_type]))
+        elif TG.default_unit:
+            unit_combo.addItem(TG.default_unit)
         DM.modified = True
 
     def update_series_unit(self):
@@ -2449,9 +2443,11 @@ Sampling Rate:
         DM = self.parent
         group = DM.groups[self.selectGroup.currentText()]
         keep_check = QObject.sender(self)
-        col = keep_check.property("col")
-        header = self.headerTable.item(2, col).text()
-        group.series[header].keep = keep_check.isChecked()
+        header_columns = [keep_check.property("col")]
+        header_columns.extend([item.column() for item in self.headerTable.selectedItems()])
+        for c in set(header_columns):
+            header = self.headerTable.item(2, c).text()
+            group.series[header].keep = keep_check.isChecked()
         self.display_header_info()
         DM.modified = True
 
@@ -2634,15 +2630,12 @@ class Unit_Settings(QDialog):
         if ok:
             TG.unit_clarify = dict(zip(keys,values))
             default_type = self.defaultType.text().strip()
-            if default_type:
-                TG.default_type = default_type
-            else:
-                TG.default_type = None
+#            if default_type:
+            TG.default_type = default_type
+#            else:
+#                TG.default_type = None
             default_unit = self.defaultUnit.text().strip()
-            if default_unit:
-                TG.default_unit = default_unit
-            else:
-                TG.default_unit = None
+            TG.default_unit = default_unit
 
             TG.figure_settings.update_unit_table()
 
