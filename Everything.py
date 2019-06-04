@@ -18,10 +18,10 @@ import itertools
 import math
 import functools
 
-#from PyQt5.QtWidgets import QMainWindow, QAction, QDockWidget, QWidget, QVBoxLayout, QApplication, QDesktopWidget, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QDialog, QTabWidget
-from PyQt5.QtWidgets import *
+from PyQt5.QtWidgets import QMainWindow, QAction, QColorDialog, QInputDialog, QHeaderView, QDateTimeEdit, QComboBox, QSpinBox, QDoubleSpinBox, QRadioButton, QDockWidget, QTextEdit, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QApplication, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QSplitter, QDialog, QDialogButtonBox, QAbstractItemView, QTabWidget, QTableView, QTableWidgetItem, QTableWidget, QFileDialog, QListWidget, QListWidgetItem
+#from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIcon, QBrush, QColor, QStandardItemModel, QStandardItem, QKeySequence
-from PyQt5.QtCore import *#QCoreApplication, Qt, QObject, QAbstractTableModel
+from PyQt5.QtCore import QCoreApplication, Qt, QObject, QDateTime, QDate, QSortFilterProxyModel
 
 import numpy as np
 import pandas as pd
@@ -704,7 +704,6 @@ class Control_Frame(QWidget):
         """Reorders selected subplot up or down."""
         TG = self.parent
         AF = TG.axes_frame
-        FS = TG.figure_settings
         if len(sps) == 1:
             if direction == 'up':
                 inc = -1
@@ -1127,8 +1126,6 @@ class Figure_Settings(QWidget):
     def __init__(self, parent, saved=None):
         super().__init__()
         self.parent = parent
-        TG = self.parent
-
         mpl.rc('font', family='serif')  # controllable later maybe
         self.markers = [  # when color coordination is on, use markers in this order to differentiate series
                 'o',
@@ -1468,12 +1465,9 @@ class Data_Manager(QDialog):
         if self.modified:
             if self.popup('Discard changes?', title='Exiting Data Manager') == QMessageBox.Cancel:
                 event.ignore()
-            else:
-                QApplication.clipboard().clear()
-                event.accept()
-        else:
-            QApplication.clipboard().clear()
-            event.accept()
+                return
+        QApplication.clipboard().clear()
+        event.accept()
 
 
 class Groups_Tab(QWidget):
@@ -1486,6 +1480,7 @@ class Groups_Tab(QWidget):
         self.importsettings = QWidget()
 
         self.path_dict = {}
+        self.df_preview = {}
         self.dir = os.getcwd()
 
         vbox = QVBoxLayout()
@@ -1554,6 +1549,12 @@ class Groups_Tab(QWidget):
         vbox.addLayout(grid)
         self.setLayout(vbox)
 
+    def interpret_data(self, path, read_func=pd.read_csv):
+        dtf = 'infer'
+        r, c = self.parse_df_origin(path, read_func)
+        skiprows = None
+        return dtf, r, c, skiprows
+
     def search_dir(self):
         """Searches current directory and displays found files.
         Newly found files are given an entry with default values in a dictionary associating filepaths and reading kwargs."""
@@ -1565,7 +1566,29 @@ class Groups_Tab(QWidget):
         self.path_dict.update(new_path_dict_entries)
         for file in self.path_dict:
             if file not in TG.path_kwargs:
-                TG.path_kwargs[self.path_dict[file]] = {'format':'Infer', 'header':'Auto', 'index_col':'Auto', 'skiprows':None}
+                if file.endswith('xls') or file.endswith('xlsx'):
+                    read_func = pd.read_excel
+                elif file.endswith('csv') or file.endswith('zip'):
+                    read_func = pd.read_csv
+
+                path = self.path_dict[file]
+
+                # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
+                shownRows = 20
+                n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
+
+                if n > shownRows:
+                    upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
+                    lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
+                    ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                            index=upper_df.columns,
+                                            columns=['...']).T
+                    shown_df = upper_df.append(ellipses).append(lower_df)
+                else:
+                    shown_df = read_func(path, header=None, encoding='latin1')
+                self.df_preview[path] = shown_df
+                dtf, r, c, skiprows = self.interpret_data(path, read_func)
+                TG.path_kwargs[self.path_dict[file]] = {'format':dtf, 'header':r, 'index_col':c, 'skiprows':skiprows}
 
         self.fileSearch.setText('')
         self.foundFiles.clear()
@@ -1621,10 +1644,10 @@ class Groups_Tab(QWidget):
         DM = self.parent
         try:
             group_name = item.text()
-            new_name, ok = QInputDialog.getText(self, 'Rename Group \"{}\"'.format(group_name), 'New group name:', QLineEdit.Normal, group_name)
+            new_name, ok = QInputDialog.getText(self, 'Rename Group "{}"'.format(group_name), 'New group name:', QLineEdit.Normal, group_name)
             if ok and new_name != group_name:
                 if new_name in DM.groups:
-                    DM.feedback('Group \"{}\" already exists. Please choose a different name.'.format(new_name))
+                    DM.feedback('Group "{}" already exists. Please choose a different name.'.format(new_name))
                 else:
                     # Create new entry in DM.groups with new_name, give it old group's info, scrap the old one
                     DM.groups[new_name] = DM.groups[group_name]
@@ -1664,7 +1687,7 @@ class Groups_Tab(QWidget):
         for c in range(len(df.columns)):
             for r in range(len(df.index)):
                 try:
-                    ts0 = pd.to_datetime(df.iloc[r,c], infer_datetime_format=True)
+                    ts0 = pd.to_datetime(df.iloc[r, c], infer_datetime_format=True)
                     if ts0 is not pd.NaT:
                         if not r:  # if first row is parseable, inconclusive
                             r = None
@@ -1673,7 +1696,7 @@ class Groups_Tab(QWidget):
                         return r, c
                 except ValueError:
                     pass
-        return None, None
+        return None, 0
 
     def floatify(self, data):
         """Strips data down to float.
@@ -1700,13 +1723,15 @@ class Groups_Tab(QWidget):
         counter = 1
         for path in pathlist:
             mode = 'line' if counter == 1 else 'overwrite'
-            DM.feedback('Reading files into group \"{}\": ({}/{})... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
+            DM.feedback('Reading files into group "{}": ({}/{})... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
             DM.messageLog.repaint()
             counter += 1
 
             # Get parse kwargs associated with file
             path_kwargs = {'encoding':'latin1'}  # just load the dang file
             path_kwargs.update(TG.path_kwargs[path])
+
+            #this is kinda sloppy
             del path_kwargs['format']  # because it gets used somewhere else but comes from the same dictionary
 #                kwargs.update(path_kwargs)
             if path.endswith('xls') or path.endswith('xlsx'):
@@ -1716,35 +1741,22 @@ class Groups_Tab(QWidget):
                 read_func = pd.read_csv
 
             try:
-                # Take header_row and index_col as intersecting cell above first parseable datetime
-#                    warnings.filterwarnings('ignore')  # to ignore UserWarning: Discarding nonzero nanoseconds in conversion
-                _, auto_header, auto_index_col = self.shown_dfs[path]#self.parse_df_origin(path, read_func)
-
-                # Override header_row and index_col if set to 'Auto'
-                if path_kwargs['header'] == 'Auto':
-                    path_kwargs['header'] = auto_header
-                    auto_header = True
-                if path_kwargs['index_col'] == 'Auto':
-                    path_kwargs['index_col'] = auto_index_col
-                    auto_index_col = True
-
-                # If set to 'Auto' and auto-parser couldn't find a value, raise error
-                if path_kwargs['header'] is None: raise ValueError('Auto parser could not find a header row. Check import settings.')  # don't let the user try to read a file with no header row
-                if path_kwargs['index_col'] is None: raise ValueError('Auto parser could not find an index column. Check import settings.')  # don't let the user try to read a file without declaring an index column
+#                if path_kwargs['header'] is None: raise ValueError('Auto parser could not find a header row. Check import settings.')  # don't let the user try to read a file with no header row
+                if path_kwargs['index_col'] is None: raise ValueError('Cannot import a group without identifying an index column.')  # don't let the user try to read a file without declaring an index column
 
                 data = read_func(path, **path_kwargs)
 
                 data.index.names = ['Timestamp']
                 data.columns = data.columns.map(str)  # convert headers to strings
 
-                if TG.path_kwargs[path]['format'] == 'Infer':
+                if TG.path_kwargs[path]['format'].lower() == 'Infer':  #??? this will be changed from infer to a parsed format
                     dtf = None
 # this seems to make no difference, and I have yet to run into an error parsing datetimes with infer_datetime_format...
 # should I just hand over the reigns on this entirely to Pandas?
                 else:
                     dtf = TG.path_kwargs[path]['format']
 
-                data.index = pd.to_datetime(data.index, format=dtf, infer_datetime_format=True)
+                data.index = pd.to_datetime(data.index, infer_datetime_format=True)#, format=dtf)
                 if any(ts == pd.NaT for ts in data.index): raise ValueError('Timestamps could not be parsed from given index column. Check import settings.')
 
                 dflist.append(data)
@@ -1752,12 +1764,10 @@ class Groups_Tab(QWidget):
                 for file in DM.groups_tab.path_dict:
                     if DM.groups_tab.path_dict[file] == path: source = file
                 if 'source' not in locals(): source = path
-                DM.feedback('File "\{}\" threw an error: {}'.format(source[1:], e))
+                DM.feedback('Failed', mode='append')
+                DM.feedback('File "{}" threw an error: {}'.format(source, e))
                 return pd.DataFrame()
-
             TG.path_kwargs[path].update(path_kwargs)
-            if auto_header is True: TG.path_kwargs[path]['header'] = 'Auto'
-            if auto_index_col is True: TG.path_kwargs[path]['index_col'] = 'Auto'
 
         df = pd.concat(dflist, axis=0, sort=False)
         DM.feedback('Scrubbing data... ', mode='append')
@@ -1777,7 +1787,7 @@ class Groups_Tab(QWidget):
             DM.feedback('Group name cannot be empty.')
             return
         elif group_name in loaded_groups:
-            if DM.popup('Group \"{}\" already exists. Overwrite?'.format(group_name)) == QMessageBox.Ok:
+            if DM.popup('Group "{}" already exists. Overwrite?'.format(group_name)) == QMessageBox.Ok:
                 self.importedGroups.takeItem(loaded_groups.index(group_name))
                 #??? If group_name is a renaming of a previously loaded group, is that bad?
             else:
@@ -1787,7 +1797,6 @@ class Groups_Tab(QWidget):
             DM.feedback('Group cannot have 0 associated files.')
             return
 
-        self.shown_dfs = {}
         if self.verify_import_settings(source_files):#result == QDialog.Accepted:
             source_paths = [self.path_dict[file] for file in source_files]  #path_dict is quasi global, appended gather_files (therefore, navigating to a different directory should not disconnect files from paths)
             df = self.combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
@@ -1811,6 +1820,10 @@ class Groups_Tab(QWidget):
         self.importsettings.setModal(True)
         return self.importsettings.exec()
 
+
+    # add some print statements in here to figure out why alias gets assigned to ''
+    # (at least I think that's what's happening)
+    # maybe add line to restrict this function to 'kept' columns?
     def parse_group_units(self, group_names, update=False):
         DM = self.parent
         TG = DM.parent
@@ -1818,15 +1831,20 @@ class Groups_Tab(QWidget):
         for group_name in group_names:
             group = DM.groups[group_name]
             for header in group.series:
+                if not group.series[header].keep: continue
                 header = str(header)
                 parsed = TG.parse_unit(header)
+                print('parsed: ',parsed)
                 unit = TG.interpret_unit(parsed)
+                print('unit: ',unit)
                 group.series[header].unit = unit
                 group.series[header].unit_type = TG.get_unit_type(unit)
+                print('unit_type: ',TG.get_unit_type(unit))
                 if not unit:
                     report += header + '\n'
                 else:
                     alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
+                    print('alias: ',alias)
                     group.series[header].alias = alias
                     group.alias_dict[alias] = header
             if update:
@@ -1843,7 +1861,7 @@ class Groups_Tab(QWidget):
         try:
             item = self.importedGroups.selectedItems()[0]
             group_name = item.text()
-            if DM.popup('Delete group \"{}\"?'.format(group_name)) == QMessageBox.Ok:
+            if DM.popup('Delete group "{}"?'.format(group_name)) == QMessageBox.Ok:
                 self.importedGroups.takeItem(self.importedGroups.row(item))
                 del DM.groups[group_name]
 
@@ -1868,14 +1886,10 @@ class Import_Settings(QDialog):
         GT = self.parent
         DM = GT.parent
         TG = DM.parent
-
         self.resize(1000,500)
         self.group_files = group_files
-
         vbox = QVBoxLayout()
-
         splitter = QSplitter(Qt.Vertical)
-
 
         self.kwargTable = QTableWidget()
         self.kwargTable.verticalHeader().setDefaultSectionSize(self.kwargTable.verticalHeader().minimumSectionSize())
@@ -1899,159 +1913,154 @@ class Import_Settings(QDialog):
         splitter.addWidget(self.previewTable)
 
         self.buttonBox = QDialogButtonBox()
+        self.autoDetect = QPushButton('Auto-Detect')
+        self.autoDetect.clicked.connect(self.auto_detect)
+        self.buttonBox.addButton(self.autoDetect, QDialogButtonBox.ResetRole)
         self.buttonBox.setStandardButtons(QDialogButtonBox.Reset | QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.accepted.connect(self.apply_kwargs)
 #        self.buttonBox.button(QDialogButtonBox.Ok).setAutoDefault(True)
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.button(QDialogButtonBox.Reset).clicked.connect(self.reset)
+        self.feedback = QLabel()
+        layout = self.buttonBox.layout()
+        layout.insertWidget(2, self.feedback)
+        self.buttonBox.setLayout(layout)
 
         vbox.addWidget(splitter)
         vbox.addWidget(self.buttonBox)
         self.setLayout(vbox)
 
-        DM.feedback('Loading previews... ')
+        DM.feedback('Verify import settings... ')
         DM.messageLog.repaint()
 
         self.original_kwargs = copy.deepcopy(TG.path_kwargs)
-
+        self.current_kwargs = copy.deepcopy(self.original_kwargs)
         for i, file in enumerate(self.group_files):
-            kwargs = TG.path_kwargs[GT.path_dict[file]]
+            kwargs = self.current_kwargs[GT.path_dict[file]]
             self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
             self.kwargTable.item(i, 0).setFlags(Qt.ItemIsSelectable)
-            self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['format'])))
-            self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['header'])))
-            self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['index_col'])))
-            self.kwargTable.setItem(i, 4, QTableWidgetItem(str(kwargs['skiprows'])))
+            self.update_row_kwargs(i, kwargs)
+        self.kwargTable.setCurrentCell(0, 1)
 
-            if file.endswith('xls') or file.endswith('xlsx'):
-                read_func = pd.read_excel
-            elif file.endswith('csv') or file.endswith('zip'):
-                read_func = pd.read_csv
+    def update_row_kwargs(self, row, kwargs):
+        self.kwargTable.setItem(row, 1, QTableWidgetItem(str(kwargs['format'])))
+        self.kwargTable.setItem(row, 2, QTableWidgetItem(str(kwargs['header'])))
+        self.kwargTable.setItem(row, 3, QTableWidgetItem(str(kwargs['index_col'])))
+        self.kwargTable.setItem(row, 4, QTableWidgetItem(str(kwargs['skiprows'])))
+
+    def auto_detect(self):
+        GT = self.parent
+        selection = self.kwargTable.selectedIndexes()
+        rows = set(sorted(index.row() for index in selection))
+        for row in rows:
+            file = self.kwargTable.item(row, 0).text()
             path = GT.path_dict[file]
-
-            # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
-            shownRows = 20
-            n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
-
-            if n > shownRows:
-                upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
-                lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
-                ellipses = pd.DataFrame(['...']*len(upper_df.columns),
-                                        index=upper_df.columns,
-                                        columns=['...']).T
-                shown_df = upper_df.append(ellipses).append(lower_df)
-            else:
-                shown_df = read_func(path, header=None, encoding='latin1')
-            r, c = GT.parse_df_origin(path, read_func)
-            GT.shown_dfs[path] = (shown_df, r, c)
+            dtf, r, c, skiprows = GT.interpret_data(path)
+            kwargs = {'format':dtf, 'header':r, 'index_col':c, 'skiprows':skiprows}
+            self.update_row_kwargs(row, kwargs)
 
     def reset(self):
         GT = self.parent
         for i, file in enumerate(self.group_files):
             kwargs = self.original_kwargs[GT.path_dict[file]]
             self.kwargTable.setItem(i, 0, QTableWidgetItem(file))
-            self.kwargTable.item(i,0).setFlags(Qt.ItemIsSelectable)
-            self.kwargTable.setItem(i, 1, QTableWidgetItem(str(kwargs['format'])))
-            self.kwargTable.setItem(i, 2, QTableWidgetItem(str(kwargs['header'])))
-            self.kwargTable.setItem(i, 3, QTableWidgetItem(str(kwargs['index_col'])))
-            self.kwargTable.setItem(i, 4, QTableWidgetItem(str(kwargs['skiprows'])))
+            self.kwargTable.item(i, 0).setFlags(Qt.ItemIsSelectable)
+            self.update_row_kwargs(i, kwargs)
 
     def update_path_kwargs(self, row, column):
         GT = self.parent
-        DM = GT.parent
-        TG = DM.parent
         pick_kwargs = {1:'format', 2:'header', 3:'index_col', 4:'skiprows'}
         if column not in pick_kwargs: return
         kwarg = pick_kwargs[column]
         file = self.kwargTable.item(row, 0).text()
         path = GT.path_dict[file]
-        text = self.kwargTable.item(row, column).text()
+        text = self.kwargTable.item(row, column).text().strip()
 
         ### input permissions
         # NO INPUT CONTROL ON FORMAT FIELD, SO YOU BETTER KNOW WHAT YOU'RE DOING
         self.kwargTable.blockSignals(True)
         if kwarg == 'format':
             value = text
-        elif kwarg in ('header', 'index_col'):
-            if text.isdigit():
-                value = int(text)
-            elif text.lower() == 'auto':
-                value = 'Auto'
+        elif kwarg == 'header':
+            if not text or text.lower() == 'none':
+                value = None
             else:
-                DM.feedback('Only integers or \"Auto\" allowed.')
-                self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
+                try:
+                    value = int(text)
+                except ValueError:
+                    self.feedback.setText('Header row must be declared as an integer less than 9 or left undefined.')
+                    self.kwargTable.setItem(row, column, QTableWidgetItem(str(self.current_kwargs[path][kwarg])))
+                    self.kwargTable.blockSignals(False)
+        elif kwarg == 'index_col':
+            try:
+                value = int(text)
+            except ValueError:
+                self.feedback.setText('Index column must be identified as an integer.')
+                self.kwargTable.setItem(row, column, QTableWidgetItem(str(self.current_kwargs[path][kwarg])))
+                self.kwargTable.blockSignals(False)
                 return
         elif kwarg == 'skiprows':
-            if text == 'None':
+            if text.lower() == 'none':
                 value = []
             else:
                 value = []
                 for i in text:
-#                    limit = TG.path_kwargs[path]['header']
-#                    if limit == 'Auto'
-                    if i.isdigit() and int(i) not in value:# and int(i) > :
-                         value.append(int(i))
+                    if i.isdigit() and int(i) not in value:
+                        value.append(int(i))
                     elif i in ', []':  # ignore commas, spaces, and brackets
                         continue
                     else:
-#                        DM.feedback('Only list of unique nonzero integers or \"None\" allowed.')
-                        self.kwargTable.setItem(row, column, QTableWidgetItem(str(TG.path_kwargs[path][kwarg])))
+                        self.feedback.setText('Only list of integers from 0-9 or "None" allowed.')
+                        self.kwargTable.setItem(row, column, QTableWidgetItem(str(self.current_kwargs[path][kwarg])))
+                        self.kwargTable.blockSignals(False)
                         return
-                    value = sorted(value)
+                value = sorted(value)
             if not value: value = None
 
+        self.feedback.setText('')
         self.kwargTable.setItem(row, column, QTableWidgetItem(str(value)))
         self.kwargTable.blockSignals(False)
-        TG.path_kwargs[path][kwarg] = value
+        self.current_kwargs[path][kwarg] = value
         self.preview_df()
 
     def preview_df(self):
         GT = self.parent
-        DM = GT.parent
-        TG = DM.parent
         selection = self.kwargTable.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
             if all(x==rows[0] for x in rows):  # can only preview one row at a time.
-
-                # Populate preview table with selected 10x10 df preview
+                # Populate preview table with preview of selected
                 row = selection[0].row()
                 file = self.kwargTable.item(row, 0).text()
-                if file.endswith('xls') or file.endswith('xlsx'):
-                    read_func = pd.read_excel
-                elif file.endswith('csv') or file.endswith('zip'):
-                    read_func = pd.read_csv
                 path = GT.path_dict[file]
-
-                shown_df, r, c = GT.shown_dfs[path]
-
+                shown_df = GT.df_preview[path]
                 self.model = PandasModel(shown_df)
                 self.proxy = QSortFilterProxyModel()
                 self.proxy.setSourceModel(self.model)
                 self.previewTable.setModel(self.proxy)
+                self.previewTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
                 # Highlight selected rows/columns according to parse_kwargs
-                header = TG.path_kwargs[path]['header']
-                index_col = TG.path_kwargs[path]['index_col']
-                skiprows = TG.path_kwargs[path]['skiprows']
+                header = self.current_kwargs[path]['header']
+                index_col = self.current_kwargs[path]['index_col']
+                skiprows = self.current_kwargs[path]['skiprows']
 
-                if header == 'Auto': header = r
-                if index_col == 'Auto': index_col = c
 #                if skiprows == 'None': skiprows = None
 
                 if index_col is not None:
                     for r in range(len(shown_df.index)):
                         self.model.setData(self.model.index(r,int(index_col)), QBrush(QColor.fromRgb(255, 170, 0)), Qt.BackgroundRole)
+                if skiprows is not None:
+                    for r in skiprows:
+                        for c in range(len(shown_df.columns)):
+                            self.model.setData(self.model.index(r,c), QBrush(Qt.darkGray), Qt.BackgroundRole)
                 if header is not None:
                     for r in range(int(header)):
                         for c in range(len(shown_df.columns)):
                             self.model.setData(self.model.index(r,c), QBrush(Qt.darkGray), Qt.BackgroundRole)
                     for c in range(len(shown_df.columns)):
                         self.model.setData(self.model.index(int(header),c), QBrush(QColor.fromRgb(0, 170, 255)), Qt.BackgroundRole)
-                if skiprows is not None:
-                    for r in skiprows:
-                        for c in range(len(shown_df.columns)):
-                            self.model.setData(self.model.index(r,c), QBrush(Qt.darkGray), Qt.BackgroundRole)
             else:
                 if hasattr(self, 'proxy'): self.proxy.deleteLater()
         else:
@@ -2094,6 +2103,18 @@ class Import_Settings(QDialog):
         if event.key() == Qt.Key_Escape:
             self.close()
 
+    def apply_kwargs(self):
+        GT = self.parent
+        DM = GT.parent
+        TG = DM.parent
+        # read current kwargs into TG.path_kwargs
+        for file in self.group_files:
+            path = GT.path_dict[file]
+            if self.current_kwargs[path]['skiprows']:
+                self.current_kwargs[path]['skiprows'] = [i for i in self.current_kwargs[path]['skiprows'] if i > self.current_kwargs[path]['header']]
+            for kwarg in ('format', 'header', 'index_col', 'skiprows'):
+                TG.path_kwargs[path][kwarg] = self.current_kwargs[path][kwarg]
+
 
 class Configure_Tab(QWidget):
 
@@ -2132,7 +2153,7 @@ class Configure_Tab(QWidget):
         buttonBox.addWidget(density, 5, 0)
 
         self.density = QSpinBox()
-        self.density.setRange(0,100)
+        self.density.setRange(0, 100)
         self.density.setSingleStep(5)
         self.density.setValue(100)
         self.density.setSuffix('%')
@@ -2212,6 +2233,7 @@ class Configure_Tab(QWidget):
                         df.to_csv(f, encoding='utf-8-sig')
                     DM.feedback('Done', mode='append')
                 except PermissionError:
+                    DM.feedback('Failed', mode='append')
                     DM.feedback('Permission denied. File {} is already open or is read-only.'.format(group_name + '.csv'))
 
     def sync_scroll(self, idx):
@@ -2242,6 +2264,7 @@ class Configure_Tab(QWidget):
             if self.hideUnused.isChecked():
                 if not keep: continue
             alias = group.series[header].alias
+            print('alias: ',alias)
             unit = group.series[header].unit
             unit_type = group.series[header].unit_type #TG.get_unit_type(unit)
 
@@ -2297,8 +2320,8 @@ class Configure_Tab(QWidget):
             upper_df = df.head(shownRows//2)
             lower_df = df.tail(shownRows//2)
             if self.hideUnused.isChecked():
-                upper_df = upper_df.loc[:,[header for header in group.series if group.series[header].keep]]
-                lower_df = lower_df.loc[:,[header for header in group.series if group.series[header].keep]]
+                upper_df = upper_df.loc[:, [header for header in group.series if group.series[header].keep]]
+                lower_df = lower_df.loc[:, [header for header in group.series if group.series[header].keep]]
 
             ellipses = pd.DataFrame(['...']*len(upper_df.columns),
                                     index=upper_df.columns,
@@ -2306,7 +2329,7 @@ class Configure_Tab(QWidget):
             shown_df = upper_df.append(ellipses).append(lower_df)
         else:
             if self.hideUnused.isChecked():
-                shown_df = df.loc[:,[header for header in group.series if group.series[header].keep]]
+                shown_df = df.loc[:, [header for header in group.series if group.series[header].keep]]
             else:
                 shown_df = df
         shown_df.index = [ts.strftime('%Y-%m-%d  %H:%M:%S') if hasattr(ts, 'strftime') else '...' for ts in shown_df.index]
@@ -2344,7 +2367,6 @@ Sampling Rate:
             self.headerTable.cellChanged.disconnect(self.update_alias_scale)
         except TypeError:
             pass
-        TG = self.parent.parent
         DM = self.parent
         group_name = self.selectGroup.currentText()
         if group_name:
@@ -2379,13 +2401,13 @@ Sampling Rate:
 
             if alias and alias != group.series[header].alias:
                 if alias in group.alias_dict:
-                    DM.feedback('Alias \"{}\" is already in use. Please choose a different alias.'.format(alias))
+                    DM.feedback('Alias "{}" is already in use. Please choose a different alias.'.format(alias))
                     self.headerTable.blockSignals(True)
                     self.headerTable.setItem(3, column, QTableWidgetItem(group.series[header].alias))
                     self.headerTable.blockSignals(False)
                     return
                 if alias in group.data.columns:
-                    DM.feedback('Alias \"{}\" is the name of an original header. Please choose a different alias.'.format(alias))
+                    DM.feedback('Alias "{}" is the name of an original header. Please choose a different alias.'.format(alias))
                     self.headerTable.blockSignals(True)
                     self.headerTable.setItem(3, column, QTableWidgetItem(group.series[header].alias))
                     self.headerTable.blockSignals(False)
@@ -2405,7 +2427,7 @@ Sampling Rate:
                 group.series[header].scale = scale
                 DM.modified = True
             except ValueError:
-                DM.feedback('\"{}\" is not a valid scaling factor. Only nonzero real numbers permitted.'.format(scale))
+                DM.feedback('"{}" is not a valid scaling factor. Only nonzero real numbers permitted.'.format(scale))
             self.headerTable.blockSignals(True)  # prevents infinite recursion when setItem would call this function again
             self.headerTable.setItem(1, column, QTableWidgetItem(str(group.series[header].scale)))
             self.headerTable.blockSignals(False)
@@ -2536,6 +2558,7 @@ class Unit_Settings(QDialog):
         self.clarified.setHorizontalHeaderLabels(['Parsed', 'Interpreted'])
         self.clarified.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.clarified.verticalHeader().hide()
+        self.clarified.cellChanged.connect(self.reset_background)
         self.populate_clarified()
         vbox.addWidget(self.clarified)
 
@@ -2609,6 +2632,9 @@ class Unit_Settings(QDialog):
         for r in sorted(rows_to_delete, reverse=True):
             self.clarified.removeRow(r)
 
+    def reset_background(self, row, column):
+        self.clarified.item(row, column).setBackground(QBrush(QColor.fromRgb(255, 255, 255)))
+
     def closeEvent(self, event):
         CT = self.parent
         DM = CT.parent
@@ -2623,33 +2649,31 @@ class Unit_Settings(QDialog):
                         keys.append(key)
                         values.append(self.clarified.cellWidget(r, 1).currentText())
                     else:
+                        self.clarified.blockSignals(True)
+                        # have it just select the duplicates instead of highlighting red?
                         self.clarified.item(r,0).setBackground(QBrush(QColor.fromRgb(255, 50, 50)))
+                        self.clarified.blockSignals(False)
                         ok = False
             except AttributeError:
                 continue
         if ok:
             TG.unit_clarify = dict(zip(keys,values))
-            default_type = self.defaultType.text().strip()
-#            if default_type:
-            TG.default_type = default_type
-#            else:
-#                TG.default_type = None
-            default_unit = self.defaultUnit.text().strip()
-            TG.default_unit = default_unit
-
+            TG.default_type = self.defaultType.text().strip()
+            TG.default_unit = self.defaultUnit.text().strip()
             TG.figure_settings.update_unit_table()
 
-            group_name = CT.selectGroup.currentText()
-            if group_name:
-                group = DM.groups[group_name]
-                DM.configure_tab.populate_headerTable(group)
+# some strange behavior with this code. Leave out if not necessary. User now needs to explicitly click 'reparse units'.
+#            group_name = CT.selectGroup.currentText()
+#            if group_name:
+#                group = DM.groups[group_name]
+#                DM.configure_tab.populate_headerTable(group)
 
             event.accept()
         else:
             event.ignore()
 
     def keyPressEvent(self, event):
-        """Close dialog from escape key."""
+        """Enables dialog closure by escape key."""
         if event.key() == Qt.Key_Escape:
             self.close()
 

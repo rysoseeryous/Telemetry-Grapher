@@ -1,34 +1,3 @@
-ERROR:__main__:too many chairs in here.
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
-    raise Exception
-Exception
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
-    raise Exception
-Exception
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 278, in open_fig
-    raise Exception
-Exception
-ERROR:__main__:too many chairs in here.
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 299, in open_fig
-    raise Exception
-Exception
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 2183, in reparse_units
-    DM.groups_tab.parse_group_units([group_name], update=True)
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 1819, in parse_group_units
-    group = DM.groups[group_name]
-KeyError: ''
-CRITICAL:__main__:Unhandled exception
-Traceback (most recent call last):
-  File "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/Everything.py", line 2195, in export_data
-    group = DM.groups[group_name]
-KeyError: ''
+DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=10.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
+DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=20.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
+DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=30.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
