@@ -70,7 +70,7 @@ class Subplot_Manager():
                         color='C'+str(color_index%10)
                         color_index += 1
                         style = 'o'
-                        ax.yaxis.label.set_color('k')
+                        ax.yaxis.label.set_color(TG.current_rcs['axis.labelcolor'])
 
                     # Fetch data to plot from references in sp.contents
                     try:

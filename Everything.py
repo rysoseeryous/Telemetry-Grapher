@@ -18,10 +18,11 @@ import itertools
 import math
 import functools
 
-from PyQt5.QtWidgets import QMainWindow, QAction, QColorDialog, QInputDialog, QHeaderView, QDateTimeEdit, QComboBox, QSpinBox, QDoubleSpinBox, QRadioButton, QDockWidget, QTextEdit, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QApplication, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QSplitter, QDialog, QDialogButtonBox, QAbstractItemView, QTabWidget, QTableView, QTableWidgetItem, QTableWidget, QFileDialog, QListWidget, QListWidgetItem
+from PyQt5.QtWidgets import QGroupBox, QMainWindow, QAction, QColorDialog, QInputDialog, QHeaderView, QDateTimeEdit, QComboBox, QSpinBox, QDoubleSpinBox, QRadioButton, QDockWidget, QTextEdit, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QApplication, QGridLayout, QTreeWidget, QPushButton, QTreeWidgetItem, QStyle, QSizePolicy, QLabel, QLineEdit, QCheckBox, QSplitter, QDialog, QDialogButtonBox, QAbstractItemView, QTabWidget, QTableView, QTableWidgetItem, QTableWidget, QFileDialog, QListWidget, QListWidgetItem
 #from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIcon, QBrush, QColor, QStandardItemModel, QStandardItem, QKeySequence
-from PyQt5.QtCore import QCoreApplication, Qt, QObject, QDateTime, QDate, QSortFilterProxyModel
+from PyQt5.QtCore import QTextStream, QFile, QCoreApplication, Qt, QObject, QDateTime, QDate, QSortFilterProxyModel
+#import breeze_resources
 
 import numpy as np
 import pandas as pd
@@ -58,18 +59,43 @@ class Telemetry_Grapher(QMainWindow):
         self.default_ext = '.jpg'
         self.path_kwargs = {}
         self.auto_parse = True
+        self.saved = True
+
+        f = QFile('rc/dark.qss')
+        if not f.exists():
+            logger().error('Unable to load dark stylesheet, file not found')
+            self.dark_qss = ''
+        else:
+            f.open(QFile.ReadOnly | QFile.Text)
+            ts = QTextStream(f)
+            self.dark_qss = ts.readAll()
+        f = QFile('rc/light.qss')
+        if not f.exists():
+            logger().error('Unable to load light stylesheet, file not found')
+            self.light_qss = ''
+        else:
+            f.open(QFile.ReadOnly | QFile.Text)
+            ts = QTextStream(f)
+            self.light_qss = ts.readAll()
 
         # Read settings from config file
-        with open('unit_config.json', 'r', encoding='utf-8') as f:
+        with open('rc/config.json', 'r', encoding='utf-8') as f:
             startup = json.load(f)
         self.unit_dict = startup['unit_dict']
         self.unit_clarify = startup['unit_clarify']
         self.user_units = startup['user_units']
         self.default_type = startup['default_type']
         self.default_unit = startup['default_unit']
+        self.light_rcs = startup['light_rcs']
+        self.dark_rcs = startup['dark_rcs']
+
+        self.default_qss = self.light_qss
+        self.default_rcs = self.light_rcs
+        self.current_rcs = self.default_rcs
 
         self.setWindowTitle('Telemetry Plot Configurator')
-        self.setWindowIcon(QIcon('satellite.png'))
+        self.setWindowIcon(QIcon('rc/satellite.png'))
+#        self.setWindowIcon(QIcon('rc/toolbar_separator_vertical.png'))
         self.statusBar().showMessage('No subplot selected')
         self.manager = QWidget()
 
@@ -93,9 +119,9 @@ class Telemetry_Grapher(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.docked_FS)
         self.docked_FS.hide()
         self.figure_settings.connect_widgets(container=self.axes_frame)
-        self.control_frame.time_filter()
+#        self.control_frame.time_filter()
         self.filename = self.axes_frame.fig._suptitle.get_text()
-        self.resizeDocks([self.docked_SF], [437], Qt.Horizontal)
+        self.resizeDocks([self.docked_SF], [420], Qt.Horizontal)
 
         fileMenu = self.menuBar().addMenu('File')
         newAction = QAction('New', self)
@@ -181,10 +207,32 @@ class Telemetry_Grapher(QMainWindow):
         ### Adding Figure Settings dock to right side currently screws this up
         self.control_frame.setFixedHeight(self.control_frame.height()) #(98 on my screen)
         self.control_frame.setFixedWidth(self.control_frame.width()) #(450 on my screen)
-        self.figure_settings.setFixedWidth(141)
+        self.figure_settings.setFixedWidth(150)
+        self.set_app_style(self.default_qss, self.default_rcs)
+        self.axes_frame.refresh_all()
+
 
         ### Delete later, just for speed
         self.open_data_manager()
+
+    def popup(self, text, title=' ', informative=None, details=None, mode='save', icon=True):
+        """Brings up a message box with provided text and returns Ok or Cancel."""
+        self.prompt = QMessageBox()
+        self.prompt.setWindowIcon(QIcon('rc/satellite.png'))
+        self.prompt.setWindowTitle(title)
+        if icon: self.prompt.setIcon(QMessageBox.Question)
+        self.prompt.setText(text)
+        if mode == 'save':
+            self.prompt.setStandardButtons(QMessageBox.Discard | QMessageBox.Cancel | QMessageBox.Save)
+            self.prompt.button(QMessageBox.Save).setText('Save && Exit')
+        elif mode == 'confirm':
+            self.prompt.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        elif mode == 'alert':
+            self.prompt.setStandardButtons(QMessageBox.Ok)
+        self.prompt.setInformativeText(informative)
+        self.prompt.setDetailedText(details)
+        self.prompt.show()
+        return self.prompt.exec_()
 
     def groups_to_contents(self, groups):
         """Converts groups database into contents format. See ReadMe."""
@@ -219,6 +267,7 @@ class Telemetry_Grapher(QMainWindow):
 #            with open(self.filename + '.pickle', 'wb') as f:
 #                pl.dump(AF.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(self.save_dir))
+            self.saved = True
         else:
             self.save_as()
 
@@ -247,6 +296,7 @@ class Telemetry_Grapher(QMainWindow):
 #            with open(self.filename + '.pickle', 'wb') as f:
 #                pkl.dump(AF.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(savepath))
+            self.saved = True
 
     def parse_unit(self, header):
         """Returns last instance in header of one or more characters between square brackets."""
@@ -286,14 +336,33 @@ class Telemetry_Grapher(QMainWindow):
 
     def closeEvent(self, event):
         """Hides any floating QDockWidgets and closes all created figures upon application exit."""
+
+        self.saved = True #??? DELETE THIS OVERRIDE LATER
+        if not self.saved:
+            result = self.popup('Figure has not been saved. Exit anyway?', title='Exiting Application')
+            if result == QMessageBox.Cancel:
+                event.ignore()
+                return
+            elif result == QMessageBox.Save:
+                self.save()
         for dock in [self.docked_CF, self.docked_SF, self.docked_FS]:
             if dock.isFloating(): dock.close()
         plt.close('all')
+        self.control_frame.titleEdit.editingFinished.disconnect()
         event.accept()
 
     def new(self):
         logger.error('too many chairs in here.')
+        print(self.figure_settings.size())
         pass
+
+    def set_app_style(self, qss, mpl_rcs):
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("No Qt Application found.")
+        app.setStyleSheet(qss)
+        for k,v in mpl_rcs.items(): plt.rcParams[k] = v
+        self.axes_frame.fig.set_facecolor(mpl_rcs['figure.facecolor'])
 
     def open_fig(self):
         raise Exception
@@ -332,6 +401,7 @@ class Telemetry_Grapher(QMainWindow):
     def open_data_manager(self):
         """Opens Data Manager dialog.
         Accessible through Telemetry Grapher's Tools menu (or Ctrl+D)."""
+        self.statusBar().showMessage('Opening Data Manager')
         self.manager = Data_Manager(self)
         self.manager.setModal(True)
         self.manager.show()
@@ -352,7 +422,17 @@ class Telemetry_Grapher(QMainWindow):
         pass
 
     def toggle_dark_mode(self):
-        pass
+        if self.current_rcs == self.light_rcs:
+            qss = self.dark_qss
+            self.current_rcs = self.dark_rcs
+        else:
+            qss = self.light_qss
+            self.current_rcs = self.light_rcs
+        self.set_app_style(qss, self.current_rcs)
+        default_color = self.current_rcs['axes.labelcolor']
+        self.figure_settings.color_dict[None] = default_color
+        self.figure_settings.color_dict[''] = default_color
+        self.axes_frame.refresh_all()
 # Legacy
 #    def center(self):
 #        qr = self.frameGeometry()
@@ -378,11 +458,12 @@ class Axes_Frame(FigureCanvas):
         top = 1 - FS.upperPad.value()
         gs = gridspec.GridSpec(1, 1, left=left, right=right, bottom=bottom, top=top)
         ax0 = self.fig.add_subplot(gs[0])
+        ax0.tick_params(axis='x', labelbottom=False, bottom=False)
         self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
         self.current_sps = []
         self.available_data = TG.groups_to_contents(TG.groups)  # holds all unplotted data (unique to each Axes Frame object, see plans for excel tab implementation)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
-        self.fig.suptitle(CF.titleEdit.text(), fontsize=20)
+        self.fig.suptitle(CF.titleEdit.text(), fontsize=FS.titleSize.value())
         self.draw()
 
     def refresh_all(self):
@@ -391,6 +472,7 @@ class Axes_Frame(FigureCanvas):
             - Any value in Figure Settings is updated
             - Subplots are modified in any way
             - User manually calls it via Telemetry Grapher's Edit menu (Ctrl+R)"""
+#        print(inspect.stack())
         TG = self.parent
         FS = TG.figure_settings
         CF = TG.control_frame
@@ -430,6 +512,7 @@ class Axes_Frame(FigureCanvas):
         except IndexError:  # happens when you try to delete all the plots, some issue with instance attribute current_sps not updating when you set it to []
             pass
             # select_subplot calls self.draw(), don't need to do it again
+        TG.saved = False
 
     def select_subplot(self, event, force_select=None):
         """Highlights clicked-on subplot and displays subplot contents in plotted tree.
@@ -513,12 +596,15 @@ class Control_Frame(QWidget):
         super().__init__()
         self.parent = parent
         grid = QGridLayout()
+        self.title_edited = False
+        self.weights_edited = False
 
         title = QLabel('Title:')
         grid.addWidget(title,0,0)
 
         self.titleEdit = QLineEdit('New_Figure')
         self.titleEdit.editingFinished.connect(self.rename)
+        self.titleEdit.textEdited.connect(self.tte)
         grid.addWidget(self.titleEdit,0,1,1,5)
 
         weighting = QLabel('Weights:')
@@ -526,6 +612,7 @@ class Control_Frame(QWidget):
 
         self.weightsEdit = QLineEdit('[1]')
         self.weightsEdit.editingFinished.connect(self.adjust_weights)
+        self.titleEdit.textEdited.connect(self.wte)
         grid.addWidget(self.weightsEdit,1,1,2,2)
 
         selectStart = QLabel('Start:')
@@ -595,6 +682,12 @@ class Control_Frame(QWidget):
             grid.setColumnStretch(i,cw)
         self.setLayout(grid)
 
+    def wte(self):
+        self.weights_edited = True
+
+    def tte(self):
+        self.title_edited = True
+
     def cleanup_axes(self):
         """Manages axes ticks, tick labels, and gridlines for the whole figure."""
         TG = self.parent
@@ -602,11 +695,15 @@ class Control_Frame(QWidget):
         FS = TG.figure_settings
 
         for i, sp in enumerate(AF.subplots):
-            if i == len(AF.subplots)-1:  # Bottom-most subplot only
+            # All subplots
+            self.toggle_grid(sp)
+            for ax in sp.axes:
+                ax.tick_params(axis='y', labelsize=FS.tickSize.value())
 
+            # Lowest subplot
+            if i == len(AF.subplots)-1:  # Bottom-most subplot only
                 # Tell the host axes' xaxis it's plotting dates
                 sp.host().xaxis_date()
-
                 # Give focus to host axes
                 plt.sca(sp.host())
                 if not sp.contents:  # maybe in the future: go through subplots, find one with contents, use its xaxis ticks/labels as base xaxis ticks/labels (quality of life)
@@ -616,14 +713,12 @@ class Control_Frame(QWidget):
                     # Otherwise, set host axes' xaxis major formatter, locator, and minor locator
                     sp.host().tick_params(axis='x', labelbottom=True, bottom=True)
                     plt.xticks(rotation=FS.tickRot.value(), ha='right', fontsize=FS.tickSize.value())
-
-                    self.toggle_grid(sp)
                 plt.yticks(fontsize=FS.tickSize.value())
-            else:  # All other subplots
+
+            # All other subplots
+            else:
                 sp.host().tick_params(axis='x', which='major', labelbottom=False)
-                for ax in sp.axes:
-                    ax.tick_params(axis='y', labelsize=FS.tickSize.value())
-                self.toggle_grid(sp)
+
 
     def toggle_grid(self, sp):
         """Controls whether X/Y, major/minor gridlines are displayed in subplot sp."""
@@ -728,7 +823,7 @@ class Control_Frame(QWidget):
         # Determine index at which to insert blank subplot
         if len(sps) != 1:
             index = len(AF.subplots)-1
-            TG.statusBar().showMessage('No singular subplot selected. Subplot inserted at end.')
+#            TG.statusBar().showMessage('No singular subplot selected. Subplot inserted at end.')
         else:
             index = sps[0].index
 
@@ -828,36 +923,41 @@ class Control_Frame(QWidget):
 
     def adjust_weights(self):
         """Adjusts subplot vertical aspect ratios based on provided list of weights or sequence of digits."""
-        TG = self.parent
-        AF = TG.axes_frame
-        weights = []
-        for i in self.weightsEdit.text():  # parse weighting input
-            if i.isdigit():
-                weights.append(int(i))
-            elif i in ', []':  # ignore commas, spaces, and brackets
-                continue
-            else:
-                TG.statusBar().showMessage('Only integer inputs <10 allowed')
+        if self.weights_edited:
+            TG = self.parent
+            AF = TG.axes_frame
+            weights = []
+            for i in self.weightsEdit.text():  # parse weighting input
+                if i.isdigit():
+                    weights.append(int(i))
+                elif i in ', []':  # ignore commas, spaces, and brackets
+                    continue
+                else:
+                    TG.statusBar().showMessage('Only integer inputs <10 allowed')
+                    return
+            if len(weights) != len(AF.subplots):
+                TG.statusBar().showMessage('Figure has {} subplots but {} weights were provided'.format(len(AF.subplots), len(weights)))
                 return
-        if len(weights) != len(AF.subplots):
-            TG.statusBar().showMessage('{} weights provided for figure with {} subplots'.format(len(weights), len(AF.subplots)))
-            return
-        AF.weights = weights
-        AF.refresh_all()
+            AF.weights = weights
+            AF.refresh_all()
+            self.weights_edited = False
 
     def rename(self):
         """Renames figure."""
-        TG = self.parent
-        AF = TG.axes_frame
-        FS = TG.figure_settings
-        fig_title = re.sub('[\\\\.]', '', self.titleEdit.text())  # get rid of any backslashes or dots
-        if not fig_title:
-            AF.fig.suptitle('')
-            fig_title = 'New_Figure'
-        else:
-            AF.fig.suptitle(fig_title, fontsize=FS.titleSize.value())
-            TG.filename = fig_title
-        AF.draw()
+        if self.title_edited:
+            TG = self.parent
+            AF = TG.axes_frame
+            FS = TG.figure_settings
+            fig_title = re.sub('[\\\\.]', '', self.titleEdit.text())  # get rid of any backslashes or dots
+            if not fig_title:
+                AF.fig.suptitle('')
+                fig_title = 'New_Figure'
+            else:
+                AF.fig.suptitle(fig_title, fontsize=FS.titleSize.value())
+                TG.filename = fig_title
+            AF.draw()
+            TG.saved = False
+            self.title_edited = False
 
 
 class Series_Frame(QWidget):
@@ -1126,6 +1226,7 @@ class Figure_Settings(QWidget):
     def __init__(self, parent, saved=None):
         super().__init__()
         self.parent = parent
+        TG = self.parent
         mpl.rc('font', family='serif')  # controllable later maybe
         self.markers = [  # when color coordination is on, use markers in this order to differentiate series
                 'o',
@@ -1142,97 +1243,96 @@ class Figure_Settings(QWidget):
 
         vbox = QVBoxLayout()
 
-        figBounds = QLabel('Figure Dimensions')
-        figBounds.setAlignment(Qt.AlignCenter)
-        vbox.addWidget(figBounds)
-        figureForm = QFormLayout()
+        figureGroup= QGroupBox('Figure Dimensions')
+        figureGroup.setAlignment(Qt.AlignHCenter)
+        form = QFormLayout()
         self.upperPad = QDoubleSpinBox()
         self.upperPad.setRange(0, 0.5)
         self.upperPad.setSingleStep(.01)
         self.upperPad.setValue(0.07)
-        figureForm.addRow('Upper Pad',self.upperPad)
+        form.addRow('Upper Pad',self.upperPad)
         self.lowerPad = QDoubleSpinBox()
         self.lowerPad.setRange(0, 0.5)
         self.lowerPad.setSingleStep(.01)
         self.lowerPad.setValue(0.08)
-        figureForm.addRow('Lower Pad',self.lowerPad)
+        form.addRow('Lower Pad',self.lowerPad)
         self.leftPad = QDoubleSpinBox()
         self.leftPad.setRange(0, 0.5)
         self.leftPad.setSingleStep(.01)
         self.leftPad.setValue(0.05)
-        figureForm.addRow('Left Pad',self.leftPad)
+        form.addRow('Left Pad',self.leftPad)
         self.rightPad = QDoubleSpinBox()
         self.rightPad.setRange(0, 0.5)
         self.rightPad.setSingleStep(.01)
         self.rightPad.setValue(0.05)
-        figureForm.addRow('Right Pad',self.rightPad)
-
+        form.addRow('Right Pad',self.rightPad)
         self.hspace = QDoubleSpinBox()
         self.hspace.setRange(0, 1)
         self.hspace.setSingleStep(.01)
         self.hspace.setValue(.05)
-        figureForm.addRow('Spacing',self.hspace)
+        form.addRow('Spacing',self.hspace)
         self.parOffset = QDoubleSpinBox()
         self.parOffset.setRange(0, 1)
         self.parOffset.setDecimals(3)
         self.parOffset.setSingleStep(.005)
         self.parOffset.setValue(.05)
-        figureForm.addRow('Axis Offset',self.parOffset)
-        vbox.addLayout(figureForm)
+        form.addRow('Axis Offset',self.parOffset)
+        figureGroup.setLayout(form)
+        vbox.addWidget(figureGroup)
 
-        gridToggles = QLabel('Grid Settings')
-        gridToggles.setAlignment(Qt.AlignCenter)
-        vbox.addWidget(gridToggles)
-        gridGrid = QGridLayout()
+
+        gridGroup = QGroupBox('Grid Settings')
+        gridGroup.setAlignment(Qt.AlignHCenter)
+        grid = QGridLayout()
         self.majorXgrid = QCheckBox('Major X')
-        gridGrid.addWidget(self.majorXgrid,0,0)
+        grid.addWidget(self.majorXgrid, 0, 0)
         self.minorXgrid = QCheckBox('Minor X')
-        gridGrid.addWidget(self.minorXgrid,0,1)
+        grid.addWidget(self.minorXgrid, 0, 1)
         self.majorYgrid = QCheckBox('Major Y')
-        gridGrid.addWidget(self.majorYgrid,1,0)
+        grid.addWidget(self.majorYgrid, 1, 0)
         self.minorYgrid = QCheckBox('Minor Y')
-        gridGrid.addWidget(self.minorYgrid,1,1)
-        vbox.addLayout(gridGrid)
+        grid.addWidget(self.minorYgrid, 1, 1)
+        gridGroup.setLayout(grid)
+        vbox.addWidget(gridGroup)
 
-        plotStyle = QLabel('Plot Settings')
-        plotStyle.setAlignment(Qt.AlignCenter)
-        vbox.addWidget(plotStyle)
-        plotHBox = QHBoxLayout()
+        plotGroup = QGroupBox('Plot Settings')
+        plotGroup.setAlignment(Qt.AlignHCenter)
+        grid = QGridLayout()
         self.line = QRadioButton('Line')
-        plotHBox.addWidget(self.line)
+        grid.addWidget(self.line, 0, 0)
         self.scatter = QRadioButton('Scatter')
         self.scatter.setChecked(True)
-        plotHBox.addWidget(self.scatter)
-        vbox.addLayout(plotHBox)
+        grid.addWidget(self.scatter, 0, 1)
         self.dotsize = QDoubleSpinBox()
         self.dotsize.setRange(0, 5)
         self.dotsize.setSingleStep(.1)
         self.dotsize.setValue(0.5)
-        dotForm = QFormLayout()
-        dotForm.addRow('Marker Size', self.dotsize)
-        vbox.addLayout(dotForm)
+        grid.addWidget(QLabel('Marker Size'), 1, 0)
+        grid.addWidget(self.dotsize, 1, 1)
+        plotGroup.setLayout(grid)
+        vbox.addWidget(plotGroup)
 
-        textSettings = QLabel('Text Settings')
-        textSettings.setAlignment(Qt.AlignCenter)
-        vbox.addWidget(textSettings)
-        textForm = QFormLayout()
+        textGroup = QGroupBox('Text Settings')
+        textGroup.setAlignment(Qt.AlignHCenter)
+        form = QFormLayout()
         self.titleSize = QSpinBox()
         self.titleSize.setRange(0, 60)
         self.titleSize.setValue(30)
-        textForm.addRow('Title', self.titleSize)
+        form.addRow('Title', self.titleSize)
         self.labelSize = QSpinBox()
         self.labelSize.setRange(0, 30)
         self.labelSize.setValue(12)
-        textForm.addRow('Axis Labels', self.labelSize)
+        form.addRow('Axis Labels', self.labelSize)
         self.tickSize = QSpinBox()
         self.tickSize.setRange(0, 20)
         self.tickSize.setValue(10)
-        textForm.addRow('Tick Size', self.tickSize)
+        form.addRow('Tick Size', self.tickSize)
         self.tickRot = QSpinBox()
         self.tickRot.setRange(0, 90)
         self.tickRot.setValue(45)
-        textForm.addRow('Tick Rotation', self.tickRot)
-        vbox.addLayout(textForm)
+        form.addRow('Tick Rotation', self.tickRot)
+        textGroup.setLayout(form)
+        vbox.addWidget(textGroup)
 
         self.unit_table = QTableWidget()
         self.unit_table.setFixedWidth(123)
@@ -1248,7 +1348,9 @@ class Figure_Settings(QWidget):
         self.setLayout(vbox)
 
         self.dlg = QColorDialog()
-        self.color_dict = {None:'k', '':'k'}
+        self.dlg.setWindowIcon(QIcon('rc/satellite.png'))
+        default_color = TG.current_rcs['axes.labelcolor']
+        self.color_dict = {None:default_color, '':default_color}
         self.update_unit_table()
 
     def update_unit_table(self):
@@ -1325,7 +1427,7 @@ class Data_Manager(QDialog):
         super().__init__()
         self.parent = parent
         self.setWindowTitle('Data Manager')
-        self.setWindowIcon(QIcon('satellite.png'))
+        self.setWindowIcon(QIcon('rc/satellite.png'))
 
         self.groups = copy.deepcopy(parent.groups)  # copy so that if you can still discard changes
         self.group_reassign = {name:[name] for name in self.groups}  # for renaming groups
@@ -1336,7 +1438,7 @@ class Data_Manager(QDialog):
         self.resize(1000,500)
         grid = QGridLayout()
         self.tabBase = QTabWidget()
-        self.tabBase.setStyleSheet("QTabBar::tab {height: 30px; width: 300px} QTabWidget::tab-bar {alignment:center;}")
+#        self.tabBase.setStyleSheet("QTabBar::tab {height: 30px; width: 300px} QTabWidget::tab-bar {alignment:center;}")
         grid.addWidget(self.tabBase,0,0,1,3)
 
         msgLog = QLabel('Message Log:')
@@ -1344,7 +1446,7 @@ class Data_Manager(QDialog):
 
         self.messageLog = QTextEdit()
         self.messageLog.setReadOnly(True)
-        self.messageLog.setText('Ready')
+#        self.messageLog.setText('Ready')
         grid.addWidget(self.messageLog,1,1,2,1)
 
         self.save = QPushButton('Save')
@@ -1373,32 +1475,20 @@ class Data_Manager(QDialog):
         if event.key() == Qt.Key_Escape:
             self.close()
 
-    def popup(self, text, title='', informative=None, details=None, buttons=2):
-        """Brings up a message box with provided text and returns Ok or Cancel."""
-        self.prompt = QMessageBox()
-        self.prompt.setWindowTitle(title)
-        self.prompt.setIcon(QMessageBox.Question)
-        self.prompt.setText(text)
-        if buttons == 2:
-            self.prompt.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        elif buttons == 1:
-            self.prompt.setStandardButtons(QMessageBox.Ok)
-        self.prompt.setInformativeText(informative)
-        self.prompt.setDetailedText(details)
-        self.prompt.show()
-        return self.prompt.exec_()
-
     def feedback(self, message, mode='line'):
         """Adds message to message log as one line.
         Set mode=overwrite to overwrite the last line in the log.
         Set mode=append to append the last line in the log."""
-        if mode == 'line':
-            self.messageLog.setText(self.messageLog.toPlainText() + '\n' + message)
-        elif mode == 'append':
-            self.messageLog.setText(self.messageLog.toPlainText() + message)
-        elif mode == 'overwrite':
-            current_text = self.messageLog.toPlainText()
-            self.messageLog.setText(current_text[:current_text.rfind('\n')+1] + message)
+        if self.messageLog.toPlainText():
+            if mode == 'line':
+                self.messageLog.setText(self.messageLog.toPlainText() + '\n' + message)
+            elif mode == 'append':
+                self.messageLog.setText(self.messageLog.toPlainText() + message)
+            elif mode == 'overwrite':
+                current_text = self.messageLog.toPlainText()
+                self.messageLog.setText(current_text[:current_text.rfind('\n')+1] + message)
+        else:
+            self.messageLog.setText(message)
         self.messageLog.verticalScrollBar().setValue(self.messageLog.verticalScrollBar().maximum())
 
     def save_changes(self):
@@ -1462,10 +1552,14 @@ class Data_Manager(QDialog):
 
     def closeEvent(self, event):
         """Asks user to confirm exit if changes have been made and not saved."""
+        TG = self.parent
         if self.modified:
-            if self.popup('Discard changes?', title='Exiting Data Manager') == QMessageBox.Cancel:
+            choice = TG.popup('Discard changes?', title='Exiting Data Manager')
+            if choice == QMessageBox.Cancel:
                 event.ignore()
                 return
+            elif choice == QMessageBox.Save:
+                self.save_changes()
         QApplication.clipboard().clear()
         event.accept()
 
@@ -1550,7 +1644,7 @@ class Groups_Tab(QWidget):
         self.setLayout(vbox)
 
     def interpret_data(self, path, read_func=pd.read_csv):
-        dtf = 'infer'
+        dtf = 'Infer'
         r, c = self.parse_df_origin(path, read_func)
         skiprows = None
         return dtf, r, c, skiprows
@@ -1559,37 +1653,10 @@ class Groups_Tab(QWidget):
         """Searches current directory and displays found files.
         Newly found files are given an entry with default values in a dictionary associating filepaths and reading kwargs."""
         DM = self.parent
-        TG = DM.parent
         path = self.directory.text()
         self.dir = path
         self.loaded_files, new_path_dict_entries = self.gather_files(path)
         self.path_dict.update(new_path_dict_entries)
-        for file in self.path_dict:
-            if file not in TG.path_kwargs:
-                if file.endswith('xls') or file.endswith('xlsx'):
-                    read_func = pd.read_excel
-                elif file.endswith('csv') or file.endswith('zip'):
-                    read_func = pd.read_csv
-
-                path = self.path_dict[file]
-
-                # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
-                shownRows = 20
-                n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
-
-                if n > shownRows:
-                    upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
-                    lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
-                    ellipses = pd.DataFrame(['...']*len(upper_df.columns),
-                                            index=upper_df.columns,
-                                            columns=['...']).T
-                    shown_df = upper_df.append(ellipses).append(lower_df)
-                else:
-                    shown_df = read_func(path, header=None, encoding='latin1')
-                self.df_preview[path] = shown_df
-                dtf, r, c, skiprows = self.interpret_data(path, read_func)
-                TG.path_kwargs[self.path_dict[file]] = {'format':dtf, 'header':r, 'index_col':c, 'skiprows':skiprows}
-
         self.fileSearch.setText('')
         self.foundFiles.clear()
         self.foundFiles.addItems(self.loaded_files)
@@ -1630,7 +1697,7 @@ class Groups_Tab(QWidget):
         if caller == 'Add':
             for file in self.foundFiles.selectedItems():
                 if file.text() in [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]:
-                    DM.feedback('{} already added.\n'.format(file.text()))
+                    DM.feedback('{} already added'.format(file.text()))
                 else:
                     self.groupFiles.addItem(file.text())
         elif caller == 'Remove':
@@ -1710,7 +1777,7 @@ class Groups_Tab(QWidget):
             if str(data).lower() in ('on','true','yes','enabled'): return 1.0
             if str(data).lower() in ('off','false','no','disabled'): return 0.0
             try:
-                scrubbed = re.sub(',', '.', str(data))  # allow for German-style decimals (1,2 -> 1.2 but 1,2 -> 1.2. will still fail appropriately)
+                scrubbed = re.sub(',', '.', str(data))  # allow for German-style decimals (1,2 -> 1.2 but 1,2, -> 1.2. will still fail appropriately)
                 scrubbed = re.sub('[^0-9-.]', '', scrubbed)
                 return float(scrubbed)
             except ValueError:
@@ -1728,35 +1795,33 @@ class Groups_Tab(QWidget):
             counter += 1
 
             # Get parse kwargs associated with file
-            path_kwargs = {'encoding':'latin1'}  # just load the dang file
+            path_kwargs = {'encoding':'latin1'}  # just load the dang file as-is
             path_kwargs.update(TG.path_kwargs[path])
 
             #this is kinda sloppy
             del path_kwargs['format']  # because it gets used somewhere else but comes from the same dictionary
-#                kwargs.update(path_kwargs)
-            if path.endswith('xls') or path.endswith('xlsx'):
-                read_func = pd.read_excel
-#                    path_kwargs.update({'sheet_name':None})  # read all sheets
-            elif path.endswith('csv') or path.endswith('zip'):
-                read_func = pd.read_csv
+            if TG.path_kwargs[path]['format'].lower() == 'infer':  #??? this will be changed from infer to a parsed format
+                dtf = None
+            else:
+                dtf = TG.path_kwargs[path]['format']
+
+#            if path.endswith('xls') or path.endswith('xlsx'):
+#                read_func = pd.read_excel
+##                    path_kwargs.update({'sheet_name':None})  # read all sheets
+#            elif path.endswith('csv') or path.endswith('zip'):
+#                read_func = pd.read_csv
 
             try:
-#                if path_kwargs['header'] is None: raise ValueError('Auto parser could not find a header row. Check import settings.')  # don't let the user try to read a file with no header row
-                if path_kwargs['index_col'] is None: raise ValueError('Cannot import a group without identifying an index column.')  # don't let the user try to read a file without declaring an index column
+                # Sunrise Test.csv: 2009-06-06 14:49:01.000
+                # dtf = %Y-%m-%d %H:%M:%S.%f
 
-                data = read_func(path, **path_kwargs)
-
+                start = dt.datetime.now()
+                data = pd.read_csv(path, **path_kwargs)
                 data.index.names = ['Timestamp']
                 data.columns = data.columns.map(str)  # convert headers to strings
-
-                if TG.path_kwargs[path]['format'].lower() == 'Infer':  #??? this will be changed from infer to a parsed format
-                    dtf = None
-# this seems to make no difference, and I have yet to run into an error parsing datetimes with infer_datetime_format...
-# should I just hand over the reigns on this entirely to Pandas?
-                else:
-                    dtf = TG.path_kwargs[path]['format']
-
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)#, format=dtf)
+                data.index = pd.to_datetime(data.index, infer_datetime_format=True, format=dtf)
+                end = dt.datetime.now()
+                print(dtf, end-start)
                 if any(ts == pd.NaT for ts in data.index): raise ValueError('Timestamps could not be parsed from given index column. Check import settings.')
 
                 dflist.append(data)
@@ -1787,7 +1852,7 @@ class Groups_Tab(QWidget):
             DM.feedback('Group name cannot be empty.')
             return
         elif group_name in loaded_groups:
-            if DM.popup('Group "{}" already exists. Overwrite?'.format(group_name)) == QMessageBox.Ok:
+            if TG.popup('Group "{}" already exists. Overwrite?'.format(group_name), title='Importing Group', mode='confirm') == QMessageBox.Ok:
                 self.importedGroups.takeItem(loaded_groups.index(group_name))
                 #??? If group_name is a renaming of a previously loaded group, is that bad?
             else:
@@ -1816,14 +1881,45 @@ class Groups_Tab(QWidget):
             DM.feedback('Import canceled.', mode='append')
 
     def verify_import_settings(self, source_files):
+        DM = self.parent
+        TG = DM.parent
+        counter = 1
+        for file in source_files:
+            mode = 'line' if counter == 1 else 'overwrite'
+            DM.feedback('Loading previews: ({}/{})... '.format(counter, len(source_files)), mode=mode)
+            DM.messageLog.repaint()
+            counter += 1
+
+            if file not in TG.path_kwargs:
+                if file.endswith('xls') or file.endswith('xlsx'):
+                    read_func = pd.read_excel
+                elif file.endswith('csv') or file.endswith('zip'):
+                    read_func = pd.read_csv
+
+                path = self.path_dict[file]
+
+                # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
+                shownRows = 20
+                n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
+
+                if n > shownRows:
+                    upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
+                    lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
+                    ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                            index=upper_df.columns,
+                                            columns=['...']).T
+                    shown_df = upper_df.append(ellipses).append(lower_df)
+                else:
+                    shown_df = read_func(path, header=None, encoding='latin1')
+                self.df_preview[path] = shown_df
+                dtf, r, c, skiprows = self.interpret_data(path, read_func)
+                TG.path_kwargs[self.path_dict[file]] = {'format':dtf, 'header':r, 'index_col':c, 'skiprows':skiprows}
+        DM.feedback('Verify import settings... ', mode='append')
+        DM.messageLog.repaint()
         self.importsettings = Import_Settings(self, source_files)
         self.importsettings.setModal(True)
         return self.importsettings.exec()
 
-
-    # add some print statements in here to figure out why alias gets assigned to ''
-    # (at least I think that's what's happening)
-    # maybe add line to restrict this function to 'kept' columns?
     def parse_group_units(self, group_names, update=False):
         DM = self.parent
         TG = DM.parent
@@ -1834,34 +1930,32 @@ class Groups_Tab(QWidget):
                 if not group.series[header].keep: continue
                 header = str(header)
                 parsed = TG.parse_unit(header)
-                print('parsed: ',parsed)
                 unit = TG.interpret_unit(parsed)
-                print('unit: ',unit)
                 group.series[header].unit = unit
                 group.series[header].unit_type = TG.get_unit_type(unit)
-                print('unit_type: ',TG.get_unit_type(unit))
                 if not unit:
                     report += header + '\n'
                 else:
                     alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
-                    print('alias: ',alias)
                     group.series[header].alias = alias
                     group.alias_dict[alias] = header
             if update:
                 DM.configure_tab.populate_headerTable(group)
         if report:
-            DM.popup('Some units not assigned.',
+            TG.popup('Some units not assigned.',
                      title='Unit Parse Error Log',
                      informative='You can assign units manually under Series Configuration, leave them blank, or adjust unit settings and reparse.',
                      details=report,
-                     buttons=1)
+                     icon=False,
+                     mode='alert')
 
     def delete_group(self):
         DM = self.parent
+        TG = DM.parent
         try:
             item = self.importedGroups.selectedItems()[0]
             group_name = item.text()
-            if DM.popup('Delete group "{}"?'.format(group_name)) == QMessageBox.Ok:
+            if TG.popup('Delete group "{}"?'.format(group_name), mode='confirm') == QMessageBox.Ok:
                 self.importedGroups.takeItem(self.importedGroups.row(item))
                 del DM.groups[group_name]
 
@@ -1882,7 +1976,7 @@ class Import_Settings(QDialog):
         super().__init__()
         self.parent = parent
         self.setWindowTitle('Review Import Settings')
-        self.setWindowIcon(QIcon('satellite.png'))
+        self.setWindowIcon(QIcon('rc/satellite.png'))
         GT = self.parent
         DM = GT.parent
         TG = DM.parent
@@ -1930,9 +2024,6 @@ class Import_Settings(QDialog):
         vbox.addWidget(splitter)
         vbox.addWidget(self.buttonBox)
         self.setLayout(vbox)
-
-        DM.feedback('Verify import settings... ')
-        DM.messageLog.repaint()
 
         self.original_kwargs = copy.deepcopy(TG.path_kwargs)
         self.current_kwargs = copy.deepcopy(self.original_kwargs)
@@ -2264,9 +2355,8 @@ class Configure_Tab(QWidget):
             if self.hideUnused.isChecked():
                 if not keep: continue
             alias = group.series[header].alias
-            print('alias: ',alias)
             unit = group.series[header].unit
-            unit_type = group.series[header].unit_type #TG.get_unit_type(unit)
+            unit_type = group.series[header].unit_type
 
             keep_check = QCheckBox()
             keep_check.setChecked(keep)
@@ -2509,6 +2599,7 @@ class Unit_Settings(QDialog):
         super().__init__()
         self.parent = parent
         self.setWindowTitle('Unit Settings')
+        self.setWindowIcon(QIcon('rc/satellite.png'))
 #        self.setFixedSize(200,333)
         CT = self.parent
         DM = CT.parent
@@ -2633,7 +2724,14 @@ class Unit_Settings(QDialog):
             self.clarified.removeRow(r)
 
     def reset_background(self, row, column):
-        self.clarified.item(row, column).setBackground(QBrush(QColor.fromRgb(255, 255, 255)))
+        CT = self.parent
+        DM = CT.parent
+        TG = DM.parent
+        if TG.current_rcs == TG.dark_rcs:
+            bg = QColor.fromRgb(35, 38, 41)
+        else:
+            bg = QColor.fromRgb(255, 255, 255)
+        self.clarified.item(row, column).setBackground(QBrush(bg))
 
     def closeEvent(self, event):
         CT = self.parent
@@ -2651,7 +2749,7 @@ class Unit_Settings(QDialog):
                     else:
                         self.clarified.blockSignals(True)
                         # have it just select the duplicates instead of highlighting red?
-                        self.clarified.item(r,0).setBackground(QBrush(QColor.fromRgb(255, 50, 50)))
+                        self.clarified.item(r, 0).setBackground(QBrush(QColor.fromRgb(255, 50, 50)))
                         self.clarified.blockSignals(False)
                         ok = False
             except AttributeError:
@@ -2757,8 +2855,9 @@ class Subplot_Manager():
                             color='C'+str(color_index%10)
                             color_index += 1
                             style = 'o'
-                            ax.yaxis.label.set_color('k')
-                            ax.tick_params(axis='y', labelcolor='k')
+                            labelcolor = TG.current_rcs['axes.labelcolor']
+                            ax.yaxis.label.set_color(labelcolor)
+                            ax.tick_params(axis='y', labelcolor=labelcolor)
 
                         # Fetch data to plot from references in sp.contents
                         s = subdf[header]
@@ -2771,11 +2870,9 @@ class Subplot_Manager():
                         s = s.map(lambda x: x*scale)
 
                         if FS.scatter.isChecked():
-                            line, = ax.plot(s,
-                                            style, color=color, markersize=FS.dotsize.value(), markeredgewidth=FS.dotsize.value(), linestyle='None')
+                            line, = ax.plot(s, style, color=color, markersize=FS.dotsize.value(), markeredgewidth=FS.dotsize.value(), linestyle='None')
                         else:
-                            line, = ax.plot(s,
-                                            color=color)
+                            line, = ax.plot(s, color=color)
                         lines.append(line)
                         labels.append(alias)
                         # set ylabel to formal unit description
