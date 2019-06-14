@@ -1,0 +1,11 @@
+CRITICAL:__main__:Unhandled exception
+Traceback (most recent call last):
+  File "C:\ProgramData\Anaconda\lib\runpy.py", line 193, in _run_module_as_main
+    "__main__", mod_spec)
+  File "C:\ProgramData\Anaconda\lib\runpy.py", line 85, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\seery\Documents\GitHub\Telemetry-Grapher\Telemetry-Grapher\__main__.py", line 35, in <module>
+    X = Application_Base(logger=logger)#groups=groups)
+  File "C:\Users\seery\Documents\GitHub\Telemetry-Grapher\Telemetry-Grapher\classes\ab.py", line 39, in __init__
+    self.logger().error('Unable to load dark stylesheet, file not found')
+TypeError: 'Logger' object is not callable

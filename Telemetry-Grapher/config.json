@@ -86,6 +86,7 @@
   "default_type": "",
   "default_unit": "",
   "light_rcs": {
+    "font.family": "serif",
     "patch.edgecolor": "k",
     "text.color": "k",
     "axes.facecolor": "w",
@@ -100,6 +101,7 @@
     "savefig.edgecolor": "w"
   },
   "dark_rcs": {
+    "font.family": "serif",
     "patch.edgecolor": "#EFF0F1",
     "text.color": "#EFF0F1",
     "axes.facecolor": "#31363b",

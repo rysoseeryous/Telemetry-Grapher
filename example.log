@@ -1,6 +1,0 @@
-DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=10.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
-DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=30.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
-ERROR:__main__:too many chairs in here.
-ERROR:__main__:too many chairs in here.
-ERROR:__main__:too many chairs in here.
-ERROR:__main__:too many chairs in here.
