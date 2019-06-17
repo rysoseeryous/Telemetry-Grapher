@@ -9,7 +9,7 @@ from matplotlib import colors as mcolors
 from PyQt5.QtWidgets import (QWidget, QColorDialog,
                              QGridLayout, QFormLayout,
                              QHBoxLayout, QVBoxLayout,
-                             QGroupBox, QLabel, QCheckBox,
+                             QGroupBox, QLabel, QCheckBox, QComboBox,
                              QRadioButton, QSpinBox, QDoubleSpinBox,
                              QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QColor
@@ -35,7 +35,7 @@ class Figure_Settings(QWidget):
                 '<',
                 '>',
             ]
-# Read saved values from .txt file?
+# add to config.json?
 
         vbox = QVBoxLayout()
 
@@ -46,36 +46,35 @@ class Figure_Settings(QWidget):
         self.upperPad.setRange(0, 0.5)
         self.upperPad.setSingleStep(.01)
         self.upperPad.setValue(0.07)
-        form.addRow('Upper Pad',self.upperPad)
+        form.addRow('Upper Pad', self.upperPad)
         self.lowerPad = QDoubleSpinBox()
         self.lowerPad.setRange(0, 0.5)
         self.lowerPad.setSingleStep(.01)
         self.lowerPad.setValue(0.08)
-        form.addRow('Lower Pad',self.lowerPad)
+        form.addRow('Lower Pad', self.lowerPad)
         self.leftPad = QDoubleSpinBox()
         self.leftPad.setRange(0, 0.5)
         self.leftPad.setSingleStep(.01)
         self.leftPad.setValue(0.05)
-        form.addRow('Left Pad',self.leftPad)
+        form.addRow('Left Pad', self.leftPad)
         self.rightPad = QDoubleSpinBox()
         self.rightPad.setRange(0, 0.5)
         self.rightPad.setSingleStep(.01)
         self.rightPad.setValue(0.05)
-        form.addRow('Right Pad',self.rightPad)
+        form.addRow('Right Pad', self.rightPad)
         self.hspace = QDoubleSpinBox()
         self.hspace.setRange(0, 1)
         self.hspace.setSingleStep(.01)
         self.hspace.setValue(.05)
-        form.addRow('Spacing',self.hspace)
+        form.addRow('Spacing', self.hspace)
         self.parOffset = QDoubleSpinBox()
         self.parOffset.setRange(0, 1)
         self.parOffset.setDecimals(3)
         self.parOffset.setSingleStep(.005)
         self.parOffset.setValue(.05)
-        form.addRow('Axis Offset',self.parOffset)
+        form.addRow('Axis Offset', self.parOffset)
         figureGroup.setLayout(form)
         vbox.addWidget(figureGroup)
-
 
         gridGroup = QGroupBox('Grid Settings')
         gridGroup.setAlignment(Qt.AlignHCenter)
@@ -107,7 +106,7 @@ class Figure_Settings(QWidget):
         grid.addWidget(self.dotsize, 1, 1)
         grid.addWidget(QLabel('Plot Density'), 2, 0)
         self.density = QSpinBox()
-        self.density.setRange(0, 100)
+        self.density.setRange(1, 100)
         self.density.setSingleStep(5)
         self.density.setValue(100)
         self.density.setSuffix('%')
@@ -136,6 +135,27 @@ class Figure_Settings(QWidget):
         form.addRow('Tick Rotation', self.tickRot)
         textGroup.setLayout(form)
         vbox.addWidget(textGroup)
+
+        legendGroup = QGroupBox('Legend Settings')
+        legendGroup.setAlignment(Qt.AlignHCenter)
+        form = QFormLayout()
+        self.legendColumns = QSpinBox()
+        self.legendColumns.setRange(1, 10)
+        form.addRow('Columns', self.legendColumns)
+        self.legendPosition = QComboBox()
+        self.legendPosition.addItems(['Outside Right',
+                                      'Outside Top',
+                                      'Inside Top Left',
+                                      'Inside Top Center',
+                                      'Inside Top Right',
+                                      'Inside Center Left',
+                                      'Inside Center Right',
+                                      'Inside Bottom Left',
+                                      'Inside Bottom Center',
+                                      'Inside Bottom Right'])
+        form.addRow(self.legendPosition)
+        legendGroup.setLayout(form)
+        vbox.addWidget(legendGroup)
 
         self.unit_table = QTableWidget()
         self.unit_table.setFixedWidth(123)
@@ -180,7 +200,7 @@ class Figure_Settings(QWidget):
     def connect_widgets(self, container):
         """Connects widgets to refresh_all() in Axes Frame.
         Called by Application Base after Axes Frame has been instantiated."""
-        widgets = [
+        widgets = [  # spin boxes
                 self.upperPad,
                 self.lowerPad,
                 self.leftPad,
@@ -193,11 +213,12 @@ class Figure_Settings(QWidget):
                 self.tickSize,
                 self.tickRot,
                 self.density,
+                self.legendColumns,
                 ]
         for w in widgets:
             w.valueChanged.connect(container.refresh_all)
 
-        widgets = [
+        widgets = [  # check boxes
                 self.majorXgrid,
                 self.minorXgrid,
                 self.majorYgrid,
@@ -207,6 +228,8 @@ class Figure_Settings(QWidget):
                 ]
         for w in widgets:
             w.toggled.connect(container.refresh_all)
+
+        self.legendPosition.currentIndexChanged.connect(container.refresh_all)
 
     def pick_color(self):
         """Opens a color picker dialog and assigns it to the associated unit type."""

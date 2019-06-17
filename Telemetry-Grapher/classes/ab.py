@@ -184,9 +184,8 @@ class Application_Base(QMainWindow):
         self.set_app_style(self.default_qss, self.default_rcs)
         self.axes_frame.refresh_all()
 
-
         ### Delete later, just for speed
-        self.open_data_manager()
+#        self.open_data_manager()
 
     def popup(self, text, title=' ', informative=None, details=None, mode='save', icon=True):
         """Brings up a message box with provided text and returns Ok or Cancel."""
@@ -277,7 +276,7 @@ class Application_Base(QMainWindow):
 
     def parse_unit(self, header):
         """Returns last instance in header of one or more characters between square brackets."""
-        regex = re.compile('\[.+?\]')  # matches any characters between square brackets (but not empty [])
+        regex = re.compile('\[[^\[]*?\]')  # matches any characters between square brackets (but not empty [])
         parsed = None
         for match in re.finditer(regex, header):  # parsed ends up as last match
             parsed = match.group(0)[1:-1]  # unit without the brackets
@@ -313,8 +312,6 @@ class Application_Base(QMainWindow):
 
     def closeEvent(self, event):
         """Hides any floating QDockWidgets and closes all created figures upon application exit."""
-
-        self.saved = True #??? DELETE THIS OVERRIDE LATER
         if not self.saved:
             result = self.popup('Figure has not been saved. Exit anyway?', title='Exiting Application')
             if result == QMessageBox.Cancel:
@@ -330,7 +327,7 @@ class Application_Base(QMainWindow):
 
     def new(self):
         self.logger.error('too many chairs in here.')
-        print(self.figure_settings.size())
+        print(self.control_frame.size())
         pass
 
     def set_app_style(self, qss, mpl_rcs):

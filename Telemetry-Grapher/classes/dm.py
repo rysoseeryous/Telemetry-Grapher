@@ -97,6 +97,7 @@ class Data_Manager(QDialog):
 
             # Get new alias/unit information from self.groups
             new_contents = AB.groups_to_contents(self.groups)
+            print(new_contents)
 
             # Rename/delete groups in subplots first
             for sp in AF.subplots:
@@ -123,9 +124,9 @@ class Data_Manager(QDialog):
                                 del new_contents[new_name][new_alias]
                             if not new_contents[new_name]: del new_contents[new_name]
 
-                        transfer = sp.contents[group_name] # transfer contents from old to new
-                        del sp.contents[group_name] # scrap the old
-                        sp.contents[new_name] = transfer  # transfer variable because if you do a 1:1 assignment it will get deleted right away if the group wasn't renamed!
+
+                        sp.contents[new_name] = sp.contents[group_name] # transfer contents from old to new
+                        if new_name != group_name: del sp.contents[group_name] # scrap the old (only if group was renamed)
                     else:
                         del sp.contents[group_name] # scrap it because it doesn't exist in new_contents
                 SF.update_subplot_contents(sp, sp.contents)  # hopefully will take care of the ghost unit problem

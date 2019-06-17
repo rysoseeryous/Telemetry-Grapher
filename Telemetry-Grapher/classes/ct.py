@@ -8,13 +8,14 @@ import re
 import pandas as pd
 
 from PyQt5.QtWidgets import (QWidget, QFileDialog,
-                             QGridLayout, QHBoxLayout, QVBoxLayout,
+                             QHBoxLayout, QVBoxLayout, QGroupBox,
                              QPushButton, QLabel, QCheckBox, QComboBox,
                              QAbstractItemView, QHeaderView,
                              QTableView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtCore import Qt, QObject, QSortFilterProxyModel
 
 from .pm import Pandas_Model
+from .us import Unit_Settings
 
 class Configure_Tab(QWidget):
 
@@ -23,34 +24,42 @@ class Configure_Tab(QWidget):
         self.parent = parent
         DM = self.parent
         AB = DM.parent
-        buttonBox = QGridLayout()
+        buttonBox = QVBoxLayout()
         tableBox = QVBoxLayout(spacing=0)
         grid = QHBoxLayout()
 
         self.selectGroup = QComboBox()
         self.selectGroup.addItems(AB.groups.keys())
         self.selectGroup.currentIndexChanged.connect(self.display_header_info)
-        buttonBox.addWidget(self.selectGroup, 0, 0, 1, 2)
+        buttonBox.addWidget(self.selectGroup)
 
         self.export = QPushButton('Export DataFrame')
         self.export.clicked.connect(self.export_data)
-        buttonBox.addWidget(self.export, 1, 0, 1, 2)
+        buttonBox.addWidget(self.export)
 
         self.settings = QPushButton('Unit Settings')
         self.settings.clicked.connect(self.open_settings)
-        buttonBox.addWidget(self.settings, 2, 0, 1, 2)
+        buttonBox.addWidget(self.settings)
 
         self.reparse = QPushButton('Reparse Units')
         self.reparse.clicked.connect(self.reparse_units)
-        buttonBox.addWidget(self.reparse, 3, 0, 1, 2)
+        buttonBox.addWidget(self.reparse)
 
         self.hideUnused = QCheckBox('Hide Unused Headers')
         self.hideUnused.setChecked(True)
         self.hideUnused.stateChanged.connect(self.display_header_info)
-        buttonBox.addWidget(self.hideUnused, 4, 0, 1, 2)
+        buttonBox.addWidget(self.hideUnused)
 
+        buttonBox.addWidget(QLabel(''))
+
+        summaryGroup = QGroupBox('DataFrame Summary')
+        summaryGroup.setAlignment(Qt.AlignHCenter)
         self.summary = QLabel()
-        buttonBox.addWidget(self.summary, 5, 0, 1, 2)
+        self.summary.setAlignment(Qt.AlignTop)
+        vbox = QVBoxLayout()
+        vbox.addWidget(self.summary)
+        summaryGroup.setLayout(vbox)
+        buttonBox.addWidget(summaryGroup)
 
         self.headerTable = QTableWidget()
         self.headerTable.setRowCount(6)
@@ -225,11 +234,11 @@ class Configure_Tab(QWidget):
     def summarize_data(self, df):
         shape, start, end, total_span, sampling_rate = self.df_span_info(df)
 
-        shape_info = 'Shape Info:\n\t{} rows\n\t{} columns'.format(*shape)
-        data_start = 'Data Start:\n\t{}'.format(start.strftime('%Y-%m-%d  %H:%M:%S'))
-        data_end = 'Data End:\n\t{}'.format(end.strftime('%Y-%m-%d  %H:%M:%S'))
-        span_info = 'Total Span:\n\t{} days\n\t{} hours\n\t{} minutes'.format(*total_span)
-        rate_info = 'Sampling Rate:\n\t{} s'.format(sampling_rate)
+        shape_info = 'Shape Info:\n    {} rows\n    {} columns'.format(*shape)
+        data_start = 'Data Start:\n    {}'.format(start.strftime('%Y-%m-%d  %H:%M:%S'))
+        data_end = 'Data End:\n    {}'.format(end.strftime('%Y-%m-%d  %H:%M:%S'))
+        span_info = 'Total Span:\n    {} days\n    {} hours\n    {} minutes'.format(*total_span)
+        rate_info = 'Sampling Rate:\n    {} s'.format(sampling_rate)
         summary = shape_info + '\n\n' + data_start + '\n\n' + data_end + '\n\n' + span_info + '\n\n' + rate_info
         self.summary.setText(summary)
 

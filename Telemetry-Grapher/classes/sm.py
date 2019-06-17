@@ -13,10 +13,12 @@ class Subplot_Manager():
         self.parent = parent
         self.axes = [host]  # keeps track of parasitic axes
         self.contents = contents # standard contents format: {group: {headers:units}} in the context of display
-        self.order = order  # keeps track of preferred unit order
+        self.order = order  # keeps track of plotted unit order
         self.index = index  # convenience attribute
-        self.legend = legend  # legend toggle
         self.colorCoord = colorCoord  # color coordination toggle
+        self.legend = legend  # legend toggle
+        self.legendLocation = 'Outside Right'
+        self.ncols = 1
 
     def host(self):
         return self.axes[0]
@@ -121,8 +123,20 @@ class Subplot_Manager():
                 par.spines["right"].set_visible(True)
                 par.spines["right"].set_position(("axes", 1+offset*(i)))
 
-            npars = len(sp.axes[1:])
             if sp.legend and sp.contents:  # create and offset legend
+                location = self.legendLocation
+                if location == 'Outside Right':
+                    npars = len(sp.axes[1:])
+                    bbox = (1+offset*npars, 0.5)
+                elif location == 'Outside Top':
+                    bbox = (0.5, 1)
+                else:
+                    bbox = (0, 0, 1, 1)
                 sp.host().legend(lines, labels,
-                       bbox_to_anchor=(1+offset*npars, 0.5),
-                       loc="center left", markerscale=10)
+                       loc=CF.legend_dict[location],
+                       bbox_to_anchor=bbox,
+                       ncol=self.ncols,
+                       markerscale=10)
+
+
+

@@ -107,6 +107,7 @@ class Unit_Settings(QDialog):
             self.userUnits.setCurrentText(entry)
 
     def delete_user_type(self):
+        raise Exception('SOOOOOwOOOOP')  #??? see if this goes to error.log
         CT = self.parent
         DM = CT.parent
         AB = DM.parent

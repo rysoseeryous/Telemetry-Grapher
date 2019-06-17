@@ -54,9 +54,9 @@ class Axes_Frame(FigureCanvas):
         for ax in self.fig.axes: ax.remove()
 
         n = max([len(sp.axes[2:]) for sp in self.subplots])
-        # If any subplot has a legend, treat it like another secondary axis
+        # If any subplot has a shown legend, treat it like another secondary axis
         for sp in self.subplots:
-            if sp.legend and sp.contents:
+            if sp.legend and sp.contents and sp.legendLocation=='Outside Right':
                 n += 1
                 break
 
@@ -141,23 +141,56 @@ class Axes_Frame(FigureCanvas):
                 else:
                     highlight(self.subplots, invert=True)
                     highlight([sp])
-        if len(self.current_sps) == 1:
-            sp = self.current_sps[0]
-            SF.populate_tree(sp.contents, SF.plotted)
-            SF.search(SF.searchPlotted, SF.plotted, sp.contents)
-            CF.legendToggle.setCheckable(True)
-            CF.legendToggle.setChecked(sp.legend)
-            CF.colorCoord.setCheckable(True)
-            CF.colorCoord.setChecked(sp.colorCoord)
-            AB.statusBar().showMessage('Selected subplot: {}'.format(sp.index))
+
+        CF.legendColumns.blockSignals(True)
+        CF.legendPosition.blockSignals(True)
+        CF.legendPosition.clear()
+        if not self.current_sps:
+            CF.colorCoord.setChecked(False)
+            CF.colorCoord.setEnabled(False)
+            CF.legendToggle.setChecked(False)
+            CF.legendToggle.setEnabled(False)
+            CF.legendColumns.clear()
+            CF.legendColumns.setEnabled(False)
+            CF.legendPosition.setEnabled(False)
+            AB.statusBar().showMessage('No subplot selected')
         else:
-            SF.plotted.clear()
-            if self.current_sps:
-                CF.legendToggle.setChecked(any([sp.legend for sp in self.current_sps]))
-                CF.colorCoord.setChecked(any([sp.colorCoord for sp in self.current_sps]))
-                AB.statusBar().showMessage('Selected subplots: {}'.format(sorted([sp.index for sp in self.current_sps])))
+            CF.colorCoord.setEnabled(True)
+            CF.legendToggle.setEnabled(True)
+            CF.legendColumns.setEnabled(True)
+            CF.legendPosition.setEnabled(True)
+            CF.legendPosition.addItems(list(CF.legend_dict.keys()))
+            if len(self.current_sps) == 1:
+                sp = self.current_sps[0]
+                SF.populate_tree(sp.contents, SF.plotted)
+                SF.search(SF.searchPlotted, SF.plotted, sp.contents)
+                CF.colorCoord.setChecked(sp.colorCoord)
+                CF.legendToggle.setChecked(sp.legend)
+                CF.legendColumns.setValue(sp.ncols)
+                CF.legendPosition.setCurrentText(sp.legendLocation)
+                AB.statusBar().showMessage('Selected subplot: {}'.format(sp.index))
             else:
-                CF.legendToggle.setChecked(False)
-                CF.colorCoord.setChecked(False)
-                AB.statusBar().showMessage('No subplot selected')
+                SF.plotted.clear()
+                CF.colorCoord.setChecked(any([sp.colorCoord for sp in self.current_sps]))
+                CF.legendToggle.setChecked(any([sp.legend for sp in self.current_sps]))
+                selected_cols = [sp.ncols for sp in self.current_sps]
+                if all(x==selected_cols[0] for x in selected_cols):
+                    CF.legendColumns.setValue(selected_cols[0])
+                else:
+                    CF.legendColumns.clear()
+#                selected_positions = [sp.legendLocation for sp in self.current_sps]
+#                if all(x==selected_positions[0] for x in selected_positions):
+                CF.legendPosition.setCurrentText(self.current_sps[0].legendLocation)
+#                else:
+#                    CF.legendPosition.clear()
+                AB.statusBar().showMessage('Selected subplots: {}'.format(sorted([sp.index for sp in self.current_sps])))
+        CF.legendColumns.blockSignals(False)
+        CF.legendPosition.blockSignals(False)
+
+
+#        (if not exactly one selected)
+# If multiple subplots selected, and all have the same number of legend columns, set the value to that number
+# else disable? clear? both?
+# same with legend location
+
         self.draw()

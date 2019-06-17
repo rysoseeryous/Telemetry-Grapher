@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 from PyQt5.QtWidgets import (QWidget, QGridLayout, QStyle, QSizePolicy,
                              QPushButton, QLabel, QLineEdit, QCheckBox,
+                             QSpinBox, QComboBox,
                              QDateTimeEdit)
 from PyQt5.QtCore import QDateTime, QDate
 
@@ -26,86 +27,111 @@ class Control_Frame(QWidget):
         grid = QGridLayout()
         self.title_edited = False
         self.weights_edited = False
+        self.legend_dict = {
+            'Outside Right': 'center left',
+            'Outside Top': 'lower center',
+            'Upper Left': 'upper left',
+            'Upper Center': 'upper center',
+            'Upper Right': 'upper right',
+            'Center Left': 'center left',
+            'Center Right': 'center right',
+            'Lower Left': 'lower left',
+            'Lower Center': 'lower center',
+            'Lower Right': 'lower right',
+            }
 
         title = QLabel('Title:')
-        grid.addWidget(title,0,0)
+        grid.addWidget(title, 0, 0)
 
         self.titleEdit = QLineEdit('New_Figure')
         self.titleEdit.editingFinished.connect(self.rename)
         self.titleEdit.textEdited.connect(self.tte)
-        grid.addWidget(self.titleEdit,0,1,1,5)
+        grid.addWidget(self.titleEdit, 0, 1, 1, 2)
 
         weighting = QLabel('Weights:')
-        grid.addWidget(weighting,1,0,2,1)
+        grid.addWidget(weighting, 1, 0)
 
         self.weightsEdit = QLineEdit('[1]')
         self.weightsEdit.editingFinished.connect(self.adjust_weights)
-        self.titleEdit.textEdited.connect(self.wte)
-        grid.addWidget(self.weightsEdit,1,1,2,2)
+        self.weightsEdit.textEdited.connect(self.wte)
+        grid.addWidget(self.weightsEdit, 1, 1, 1, 2)
 
         selectStart = QLabel('Start:')
-        grid.addWidget(selectStart,3,0,2,1)
+        grid.addWidget(selectStart, 2, 0)
 
         self.selectStart = QDateTimeEdit()
         self.selectStart.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
         self.selectStart.dateTimeChanged.connect(self.time_filter)
-        grid.addWidget(self.selectStart,3,1,2,1)
+        grid.addWidget(self.selectStart, 2, 1)
 
         self.minTS = QPushButton('Min')
         self.minTS.setFixedWidth(30)
         self.minTS.clicked.connect(self.set_start_min)
-        grid.addWidget(self.minTS,3,2,2,1)
+        grid.addWidget(self.minTS, 2, 2)
 
         selectEnd = QLabel('End:')
-        grid.addWidget(selectEnd,5,0,2,1)
+        grid.addWidget(selectEnd, 3, 0)
 
         self.selectEnd = QDateTimeEdit(QDate.currentDate())
         self.selectEnd.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
         self.selectEnd.dateTimeChanged.connect(self.time_filter)
-        grid.addWidget(self.selectEnd,5,1,2,1)
+        grid.addWidget(self.selectEnd, 3, 1)
 
         self.maxTS = QPushButton('Max')
         self.maxTS.setFixedWidth(30)
         self.maxTS.clicked.connect(self.set_end_max)
-        grid.addWidget(self.maxTS,5,2,2,1)
-
-        self.cycle = QPushButton('Cycle Axes')
-        self.cycle.clicked.connect(lambda: self.cycle_subplot(parent.axes_frame.current_sps))
-        grid.addWidget(self.cycle,1,3,2,1)
-
-        self.legendToggle = QCheckBox('Legend')
-        self.legendToggle.clicked.connect(lambda: self.toggle_legend(parent.axes_frame.current_sps))
-        grid.addWidget(self.legendToggle,3,3,2,1)
+        grid.addWidget(self.maxTS, 3, 2)
 
         self.colorCoord = QCheckBox('Color by Unit')
         self.colorCoord.clicked.connect(lambda: self.color_coordinate(parent.axes_frame.current_sps))
-        grid.addWidget(self.colorCoord,5,3,2,1)
+        grid.addWidget(self.colorCoord, 0, 3, 1, 2)
+
+        self.legendToggle = QCheckBox('Show Legend')
+        self.legendToggle.clicked.connect(lambda: self.toggle_legend(parent.axes_frame.current_sps))
+        grid.addWidget(self.legendToggle, 1, 3, 1, 2)
+
+        legendColumns = QLabel('Columns')
+        grid.addWidget(legendColumns, 2, 3)
+
+        self.legendColumns = QSpinBox()
+        self.legendColumns.setRange(1, 10)
+        self.legendColumns.valueChanged.connect(lambda: self.set_legend_columns(parent.axes_frame.current_sps))
+        grid.addWidget(self.legendColumns, 2, 4)
+
+        self.legendPosition = QComboBox()
+        self.legendPosition.addItems(list(self.legend_dict.keys()))
+        self.legendPosition.currentIndexChanged.connect(lambda: self.set_legend_position(parent.axes_frame.current_sps))
+        grid.addWidget(self.legendPosition, 3, 3, 1, 2)
+
+        self.cycle = QPushButton('Cycle Axes')
+        self.cycle.clicked.connect(lambda: self.cycle_subplot(parent.axes_frame.current_sps))
+        grid.addWidget(self.cycle, 0, 5)
 
         self.insert = QPushButton('Insert')
         self.insert.clicked.connect(lambda: self.insert_subplot(parent.axes_frame.current_sps))
-        grid.addWidget(self.insert,1,4,2,1)
+        grid.addWidget(self.insert, 1, 5)
 
         self.delete = QPushButton('Delete')
         self.delete.clicked.connect(lambda: self.delete_subplot(parent.axes_frame.current_sps))
-        grid.addWidget(self.delete,3,4,2,1)
+        grid.addWidget(self.delete, 2, 5)
 
         self.clear = QPushButton('Clear')
         self.clear.clicked.connect(lambda: self.clear_subplot(parent.axes_frame.current_sps))
-        grid.addWidget(self.clear,5,4,2,1)
+        grid.addWidget(self.clear, 3, 5)
 
         self.reorderUp = QPushButton()
         self.reorderUp.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_TitleBarShadeButton')))
         self.reorderUp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.reorderUp.clicked.connect(lambda: self.reorder(parent.axes_frame.current_sps, 'up'))
-        grid.addWidget(self.reorderUp,1,5,3,1)
+        grid.addWidget(self.reorderUp, 0, 6, 2, 1)
 
         self.reorderDown = QPushButton()
         self.reorderDown.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_TitleBarUnshadeButton')))
         self.reorderDown.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.reorderDown.clicked.connect(lambda: self.reorder(parent.axes_frame.current_sps, 'down'))
-        grid.addWidget(self.reorderDown,4,5,3,1)
+        grid.addWidget(self.reorderDown, 2, 6, 2, 1)
 
-        col_weights = [.01, .01, .01, 1, 1, .01]
+        col_weights = [.01, .01, .01, 1, 1, 1, .01]
         for i,cw in enumerate(col_weights):
             grid.setColumnStretch(i,cw)
         self.setLayout(grid)
@@ -301,23 +327,6 @@ class Control_Frame(QWidget):
         else:
             AB.statusBar().showMessage('Select one or more subplots to clear')
 
-    def toggle_legend(self, sps):
-        """Toggles legend display of selected subplot(s)."""
-        AB = self.parent
-        if sps:
-            AF = AB.axes_frame
-            if len(sps) == 1:
-                sp = sps[0]
-                sp.legend = not sp.legend
-            else:
-                any_legend = any([sp.legend for sp in sps])
-                for sp in sps:
-                    sp.legend = not any_legend
-            AF.refresh_all()
-        else:
-            self.legendToggle.setCheckable(False)
-            AB.statusBar().showMessage('Select one or more subplots to toggle legend')
-
     def color_coordinate(self, sps):
         """Coordinates color of lines and axis labels in selected subplot(s) by unit type."""
         AB = self.parent
@@ -332,9 +341,37 @@ class Control_Frame(QWidget):
                     sp.colorCoord = not any_coord
             AF.refresh_all()
         else:
-
-            self.colorCoord.setCheckable(False)
             AB.statusBar().showMessage('Select one or more subplots to toggle color coordination')
+
+    def toggle_legend(self, sps):
+        """Toggles legend display of selected subplot(s)."""
+        AB = self.parent
+        if sps:
+            AF = AB.axes_frame
+            if len(sps) == 1:
+                sp = sps[0]
+                sp.legend = not sp.legend
+            else:
+                any_legend = any([sp.legend for sp in sps])
+                for sp in sps:
+                    sp.legend = not any_legend
+            AF.refresh_all()
+        else:
+            AB.statusBar().showMessage('Select one or more subplots to toggle legend')
+
+    def set_legend_columns(self, sps):
+        AB = self.parent
+        AF = AB.axes_frame
+        for sp in sps:
+            sp.ncols = self.legendColumns.value()
+        AF.refresh_all()
+
+    def set_legend_position(self, sps):
+        AB = self.parent
+        AF = AB.axes_frame
+        for sp in sps:
+            sp.legendLocation = self.legendPosition.currentText()
+        AF.refresh_all()
 
     def cycle_subplot(self, sps):
         """Cycles through unit order permutations of selected subplot(s)."""

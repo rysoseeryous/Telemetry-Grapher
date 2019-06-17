@@ -50,7 +50,7 @@ class Groups_Tab(QWidget):
         self.fileSearch.setFocus(True)
         grid.addWidget(self.fileSearch, 0, 0)
 
-        self.groupName = QLineEdit('Test')  # delete initial text later #!!!
+        self.groupName = QLineEdit()  # delete initial text later #!!!
         self.groupName.setPlaceholderText('Group Name')
         self.groupName.returnPressed.connect(self.import_group)
         grid.addWidget(self.groupName, 0, 1)
@@ -253,7 +253,7 @@ class Groups_Tab(QWidget):
 
             #this is kinda sloppy
             del path_kwargs['format']  # because it gets used somewhere else but comes from the same dictionary
-            if AB.path_kwargs[path]['format'].lower() == 'infer':  #??? this will be changed from infer to a parsed format
+            if AB.path_kwargs[path]['format'].lower() == 'infer':
                 dtf = None
             else:
                 dtf = AB.path_kwargs[path]['format']
