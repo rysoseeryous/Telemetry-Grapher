@@ -10,22 +10,22 @@ import datetime as dt
 import pandas as pd
 import numpy as np
 
-from PyQt5.QtWidgets import (QWidget, QMessageBox, QFileDialog, QInputDialog,
+from PyQt5.QtWidgets import (QWidget, QFileDialog, QInputDialog,
                              QGridLayout, QHBoxLayout, QVBoxLayout, QStyle,
-                             QPushButton, QLabel, QLineEdit,
-                             QListWidget, QListWidgetItem)
+                             QPushButton, QLabel, QLineEdit, QListWidget)
+from PyQt5.QtCore import QObject
 
-from .import_settings import Import_Settings
+from .import_settings import ImportSettings
 from ..internal.group import Group
 
-class Groups_Tab(QWidget):
+class GroupsTab(QWidget):
     """UI for organizing source files into groups."""
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        DM = self.parent
-        self.importsettings = QWidget()
+        dm = self.parent
+#        self.importsettings = QWidget()
 
         self.path_dict = {}
         self.df_preview = {}
@@ -34,7 +34,8 @@ class Groups_Tab(QWidget):
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
         self.browse = QPushButton()
-        self.browse.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_DialogOpenButton')))
+        icon = getattr(QStyle, 'SP_DialogOpenButton')
+        self.browse.setIcon(self.style().standardIcon(icon))
         self.browse.clicked.connect(self.browse_dialog)
         hbox.addWidget(self.browse)
         self.directory = QLineEdit(self.dir)
@@ -44,95 +45,93 @@ class Groups_Tab(QWidget):
 
         grid = QGridLayout()
 
-        self.fileSearch = QLineEdit()
-        self.fileSearch.setPlaceholderText('Search')
-        self.fileSearch.textChanged.connect(self.filter_files)
-        self.fileSearch.setFocus(True)
-        grid.addWidget(self.fileSearch, 0, 0)
+        self.file_search = QLineEdit()
+        self.file_search.setPlaceholderText('Search')
+        self.file_search.textChanged.connect(self.filter_files)
+        self.file_search.setFocus(True)
+        grid.addWidget(self.file_search, 0, 0)
 
-        self.groupName = QLineEdit('Test')  # delete initial text later #!!!
-        self.groupName.setPlaceholderText('Group Name')
-        self.groupName.returnPressed.connect(self.import_group)
-        grid.addWidget(self.groupName, 0, 1)
+        self.group_name = QLineEdit('Test')  # delete initial text later #!!!
+        self.group_name.setPlaceholderText('Group Name')
+        self.group_name.returnPressed.connect(self.import_group)
+        grid.addWidget(self.group_name, 0, 1)
 
-        self.importGroup = QPushButton('Import Group')
-        self.importGroup.clicked.connect(self.import_group)
-        self.importGroup.setDefault(True)
-        grid.addWidget(self.importGroup, 0, 2)
+        self.import_button = QPushButton('Import Group')
+        self.import_button.clicked.connect(self.import_group)
+        self.import_button.setDefault(True)
+        grid.addWidget(self.import_button, 0, 2)
 
-        foundFilesLabel = QLabel('Found Files')
-        grid.addWidget(foundFilesLabel, 1, 0)
+        grid.addWidget(QLabel('Found Files'), 1, 0)
 
-        groupFilesLabel = QLabel('Files in Group')
-        grid.addWidget(groupFilesLabel, 1, 1)
+        grid.addWidget(QLabel('Files in Group'), 1, 1)
 
-        importedGroupsLabel = QLabel('Imported Groups')
-        grid.addWidget(importedGroupsLabel, 1, 2)
+        grid.addWidget(QLabel('Imported Groups'), 1, 2)
 
-        self.foundFiles = QListWidget()
-        self.foundFiles.setSelectionMode(QListWidget.ExtendedSelection)
-        grid.addWidget(self.foundFiles, 2, 0)
+        self.found_files = QListWidget()
+        self.found_files.setSelectionMode(QListWidget.ExtendedSelection)
+        grid.addWidget(self.found_files, 2, 0)
 
-        self.groupFiles = QListWidget()
-        self.groupFiles.setSelectionMode(QListWidget.ExtendedSelection)
-        grid.addWidget(self.groupFiles, 2, 1)
+        self.group_files = QListWidget()
+        self.group_files.setSelectionMode(QListWidget.ExtendedSelection)
+        grid.addWidget(self.group_files, 2, 1)
 
-        self.importedGroups = QListWidget()
-        self.importedGroups.addItems(DM.groups.keys())
-        self.importedGroups.itemDoubleClicked.connect(self.rename_group)
-        grid.addWidget(self.importedGroups, 2, 2)
+        self.imported_groups = QListWidget()
+        self.imported_groups.addItems(dm.groups.keys())
+        self.imported_groups.itemDoubleClicked.connect(self.rename_group)
+        grid.addWidget(self.imported_groups, 2, 2)
 
         self.add = QPushButton('Add to Group')
-        self.add.clicked.connect(lambda: self.toggle_file_active('Add'))
+        self.add.clicked.connect(self.toggle_file_active)
         grid.addWidget(self.add, 3, 0)
 
         self.remove = QPushButton('Remove from Group')
-        self.remove.clicked.connect(lambda: self.toggle_file_active('Remove'))
+        self.remove.clicked.connect(self.toggle_file_active)
         grid.addWidget(self.remove, 3, 1)
 
-        self.deleteGroup = QPushButton('Delete Group')
-        self.deleteGroup.clicked.connect(self.delete_group)
-        grid.addWidget(self.deleteGroup, 3, 2)
+        self.delete = QPushButton('Delete Group')
+        self.delete.clicked.connect(self.delete_group)
+        grid.addWidget(self.delete, 3, 2)
 
         vbox.addLayout(grid)
         self.setLayout(vbox)
 
-    def interpret_data(self, path, read_func=pd.read_csv):
+    def interpret_data(self, path):
         dtf = 'Infer'
-        r, c = self.parse_df_origin(path, read_func)
+        r, c = self.parse_df_origin(path)
         skiprows = None
         return dtf, r, c, skiprows
 
     def search_dir(self):
         """Searches current directory and displays found files.
-        Newly found files are given an entry with default values in a dictionary associating filepaths and reading kwargs."""
+        Newly found files are given an entry with default values in a
+        dictionary associating filepaths and reading kwargs."""
         path = self.directory.text()
         self.dir = path
         try:
             self.loaded_files, new_path_dict_entries = self.gather_files(path)
             self.path_dict.update(new_path_dict_entries)
-            self.fileSearch.setText('')
-            self.foundFiles.clear()
-            self.foundFiles.addItems(self.loaded_files)
+            self.file_search.setText('')
+            self.found_files.clear()
+            self.found_files.addItems(self.loaded_files)
         except FileNotFoundError:
-            DM = self.parent
-            DM.feedback('{} is not a valid path.'.format(path))
+            dm = self.parent
+            dm.feedback('{} is not a valid path.'.format(path))
 
     def browse_dialog(self):
-        """Opens a file dialog to select a working directory and displays found files."""
+        """Opens a file dialog to select a working directory."""
         path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
         if path:
             self.directory.setText(path)
             self.search_dir()
 
     def gather_files(self, path):
-        """Returns list of file names in directory path which match types in filetypes.
+        """Returns list of csv file names in directory path.
         Excludes temporary files.
         Does not search subfolders.
         Also returns dictionary associating files to their source paths."""
         found_files = []
         path_dict = {}
-        filetypes = re.compile(r'(csv|zip|txt|xls|xlsx)$')
+        filetypes = re.compile(r'(csv|zip)$')
         exclude = re.compile(r'^~\$')
         for file in os.listdir(path):
             if re.search(filetypes, file) and not re.search(exclude, file):
@@ -142,67 +141,78 @@ class Groups_Tab(QWidget):
 
     def filter_files(self):
         """Displays files in found files list which match searchbar input."""
-        DM = self.parent
-        pattern = re.compile(self.fileSearch.text(), re.IGNORECASE)
-        matches = [item for item in DM.groups_tab.loaded_files if re.search(pattern,item)]
-        self.foundFiles.clear()
-        self.foundFiles.addItems(matches)
+        dm = self.parent
+        pattern = re.compile(self.file_search.text(), re.IGNORECASE)
+        matches = [item for item in dm.groups_tab.loaded_files
+                   if re.search(pattern,item)]
+        self.found_files.clear()
+        self.found_files.addItems(matches)
 
-    def toggle_file_active(self, caller):
+    def toggle_file_active(self):
         """Transfers file to or from group file list."""
-        DM = self.parent
-        if caller == 'Add':
-            for file in self.foundFiles.selectedItems():
-                if file.text() in [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]:
-                    DM.feedback('{} already added'.format(file.text()))
+        dm = self.parent
+        if QObject.sender(self) == self.add:
+            for file in self.found_files.selectedItems():
+                w = self.group_files
+                if file.text() in [w.item(i).text() for i in range(w.count())]:
+                    dm.feedback('{} already added'.format(file.text()))
                 else:
-                    self.groupFiles.addItem(file.text())
-        elif caller == 'Remove':
-            for file in self.groupFiles.selectedItems():
-                self.groupFiles.takeItem(self.groupFiles.row(file))
+                    self.group_files.addItem(file.text())
+        if QObject.sender(self) == self.remove:
+            for file in self.group_files.selectedItems():
+                self.group_files.takeItem(self.group_files.row(file))
 
     def rename_group(self, item):
         """Renames imported group.
-        Keeps track of past renaming operations so Data Manager's save changes can identify existing groups as having been renamed.
+        Keeps track of past renaming operations so Data Manager's save changes
+        can identify existing groups as having been renamed.
         Accessible by double clicking on an imported group."""
-        DM = self.parent
+        dm = self.parent
         try:
             group_name = item.text()
-            new_name, ok = QInputDialog.getText(self, 'Rename Group "{}"'.format(group_name), 'New group name:', QLineEdit.Normal, group_name)
+            new_name, ok = QInputDialog.getText(
+                    self,
+                    'Rename Group "{}"'.format(group_name),
+                    'New group name:',
+                    QLineEdit.Normal,
+                    group_name)
             if ok and new_name != group_name:
-                if new_name in DM.groups:
-                    DM.feedback('Group "{}" already exists. Please choose a different name.'.format(new_name))
+                if new_name in dm.groups:
+                    dm.feedback('Group "{}" already exists.'
+                                'Please choose a different name.'
+                                .format(new_name))
                 else:
-                    # Create new entry in DM.groups with new_name, give it old group's info, scrap the old one
-                    DM.groups[new_name] = DM.groups[group_name]
-                    del DM.groups[group_name]
+                    dm.groups[new_name] = dm.groups[group_name]
+                    del dm.groups[group_name]
                     # Append new name list of renames
-                    # DM.group_reassign looks like {AB name: [AB name, rename1, rename2... DM name]}
-                    for name in DM.group_reassign:
-                        if group_name == DM.group_reassign[name][-1]:
-                            DM.group_reassign[name].append(new_name)
+                    # dm.group_reassign looks like:
+                    # {ui name: [ui name, rename1, rename2... dm name]}
+                    for name in dm.group_reassign:
+                        if group_name == dm.group_reassign[name][-1]:
+                            dm.group_reassign[name].append(new_name)
                             break
-                    i = self.importedGroups.row(item)
-                    self.importedGroups.takeItem(i)
-                    self.importedGroups.insertItem(i, QListWidgetItem(new_name))
-                    i = DM.configure_tab.selectGroup.findText(group_name)
-                    DM.configure_tab.selectGroup.blockSignals(True)
-                    DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group_name))
-                    DM.configure_tab.selectGroup.blockSignals(False)
-                    DM.configure_tab.selectGroup.insertItem(i, new_name)
-                    DM.modified = True
+                    i = self.imported_groups.row(item)
+                    self.imported_groups.takeItem(i)
+                    self.imported_groups.insertItem(i, new_name)
+                    i = dm.configure_tab.select_group.findText(group_name)
+                    dm.configure_tab.select_group.blockSignals(True)
+                    dm.configure_tab.select_group.removeItem(i)
+                    dm.configure_tab.select_group.blockSignals(False)
+                    dm.configure_tab.select_group.insertItem(i, new_name)
+                    dm.modified = True
         except IndexError as e:
             print(e)
 
-    def parse_df_origin(self, path, read_func, nrows=20):
-        """Tries to identify the cell at which the header row and index column intersect.
+    def parse_df_origin(self, path, nrows=20):
+        """Guesses the intersection of header row and index column.
         - Loop through the first 20 rows of each column.
-        - If cell can be parsed as a datetime, return coordinates of cell directly above.
-        - If no cells can be parsed, return Nones."""
+        - If cell can be parsed as a datetime,
+          return coordinates of cell directly above.
+        - If no cells can be parsed, return None, 0."""
         n = 1
         while n <= nrows:  # avoid asking for more rows than there are
             try:
-                df = read_func(path, nrows=n, header=None, encoding='latin1')
+                df = pd.read_csv(path, nrows=n, header=None, encoding='latin1')
                 n += 1
             except IndexError:
                 if 'df' not in locals(): df = pd.DataFrame()
@@ -211,13 +221,13 @@ class Groups_Tab(QWidget):
         for c in range(len(df.columns)):
             for r in range(len(df.index)):
                 try:
-                    ts0 = pd.to_datetime(df.iloc[r, c], infer_datetime_format=True)
+                    ts0 = pd.to_datetime(df.iloc[r, c],
+                                         infer_datetime_format=True)
                     if ts0 is not pd.NaT:
                         if not r:  # if first row is parseable, inconclusive
-                            r = None
+                            return None, c
                         else:  # else return cell above first parseable cell
-                            r = r-1
-                        return r, c
+                            return r-1, c
                 except ValueError:
                     pass
         return None, 0
@@ -225,198 +235,227 @@ class Groups_Tab(QWidget):
     def floatify(self, data):
         """Strips data down to float.
         - Try to return data as float.
-        - If not possible, try to interpret data as quasi-boolean and return 1.0 or 0.0.
-        - If not quasi-boolean, scrub away everything but numbers, minus signs, and decimals and return as float.
+        - If not possible, try to interpret data as 1.0 or 0.0.
+        - If not quasi-boolean, scrub away everything but
+          numbers, minus signs, and decimals and return as float.
         - Return NaN if all other attempts fail."""
         try:
-            return float(data)  # try returning data as float as-is. Should speed things up.
+            return float(data)  # try returning data as float as-is.
         except (ValueError, TypeError):
             if str(data).lower() in ('on','true','yes','enabled'): return 1.0
             if str(data).lower() in ('off','false','no','disabled'): return 0.0
             try:
-                scrubbed = re.sub(',', '.', str(data))  # allow for German-style decimals (1,2 -> 1.2 but 1,2, -> 1.2. will still fail appropriately)
+                # allow for German-style decimals
+                # (1,2 -> 1.2 but 1,2, -> 1.2. will still fail appropriately)
+                scrubbed = re.sub(',', '.', str(data))
                 scrubbed = re.sub('[^0-9-.]', '', scrubbed)
                 return float(scrubbed)
             except ValueError:
                 return np.nan
 
     def combine_files(self, pathlist):
-        DM = self.parent
-        AB = DM.parent
+        dm = self.parent
+        ui = dm.parent
         dflist = []
         counter = 1
         for path in pathlist:
             mode = 'line' if counter == 1 else 'overwrite'
-            DM.feedback('Reading files into group "{}": ({}/{})... '.format(self.groupName.text(), counter, len(pathlist)), mode=mode)
-            DM.messageLog.repaint()
+            dm.feedback('Reading files into group "{}": ({}/{})... '
+                        .format(self.group_name.text(), counter, len(pathlist)),
+                        mode=mode)
+            dm.message_log.repaint()
             counter += 1
 
             # Get parse kwargs associated with file
-            path_kwargs = {'encoding':'latin1'}  # just load the dang file as-is
-            path_kwargs.update(AB.path_kwargs[path])
+            path_kwargs = {'encoding':'latin1'}  # load file as-is
+            path_kwargs.update(ui.path_kwargs[path])
 
             #this is kinda sloppy
-            del path_kwargs['format']  # because it gets used somewhere else but comes from the same dictionary
-            if AB.path_kwargs[path]['format'].lower() == 'infer':
+            # gets used somewhere else but comes from the same dictionary
+            del path_kwargs['format']
+            if ui.path_kwargs[path]['format'].lower() == 'infer':
                 dtf = None
             else:
-                dtf = AB.path_kwargs[path]['format']
-
-#            if path.endswith('xls') or path.endswith('xlsx'):
-#                read_func = pd.read_excel
-##                    path_kwargs.update({'sheet_name':None})  # read all sheets
-#            elif path.endswith('csv') or path.endswith('zip'):
-#                read_func = pd.read_csv
+                dtf = ui.path_kwargs[path]['format']
 
             try:
-                # Sunrise Test.csv: 2009-06-06 14:49:01.000
-                # dtf = %Y-%m-%d %H:%M:%S.%f
-
                 start = dt.datetime.now()
                 data = pd.read_csv(path, **path_kwargs)
                 data.index.names = ['Timestamp']
-                data.columns = data.columns.map(str)  # convert headers to strings
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True, format=dtf)
+                data.columns = data.columns.map(str)
+                data.index = pd.to_datetime(data.index,
+                                            infer_datetime_format=True,
+                                            format=dtf)
                 end = dt.datetime.now()
                 # This error has never been thrown
-                if any(ts == pd.NaT for ts in data.index): raise ValueError('Timestamps could not be parsed from given index column. Check import settings.')
+                if any(ts == pd.NaT for ts in data.index):
+                    raise ValueError('Timestamps could not be parsed'
+                                     'from given index column.'
+                                     'Check import settings.')
 
                 dflist.append(data)
             except ValueError as e:
-                for file in DM.groups_tab.path_dict:
-                    if DM.groups_tab.path_dict[file] == path: source = file
+                for file in dm.groups_tab.path_dict:
+                    if dm.groups_tab.path_dict[file] == path: source = file
                 if 'source' not in locals(): source = path
-                DM.feedback('Failed', mode='append')
-                DM.feedback('File "{}" threw an error: {}'.format(source, e))
+                dm.feedback('Failed', mode='append')
+                dm.feedback('File "{}" threw an error: {}'.format(source, e))
                 return pd.DataFrame()
-            AB.path_kwargs[path].update(path_kwargs)
+            ui.path_kwargs[path].update(path_kwargs)
 
         df = pd.concat(dflist, axis=0, sort=False)
-        DM.feedback('Scrubbing data... ', mode='append')
-        DM.messageLog.repaint()
+        dm.feedback('Scrubbing data... ', mode='append')
+        dm.message_log.repaint()
         df = df.applymap(self.floatify)
-        DM.feedback('Done', mode='append')
+        dm.feedback('Done', mode='append')
         return df.sort_index()
 
     def import_group(self):
-        DM = self.parent
-        AB = DM.parent
-        group_name = self.groupName.text()
-        loaded_groups = [self.importedGroups.item(i).text() for i in range(self.importedGroups.count())]
+        dm = self.parent
+        ui = dm.parent
+        group_name = self.group_name.text()
+        w = self.imported_groups
+        loaded_groups = [w.item(i).text() for i in range(w.count())]
 
         # Use case filtering
         if group_name == '':
-            DM.feedback('Group name cannot be empty.')
+            dm.feedback('Group name cannot be empty.')
             return
         elif group_name in loaded_groups:
-            if AB.popup('Group "{}" already exists. Overwrite?'.format(group_name), title='Importing Group', mode='confirm') == QMessageBox.Ok:
-                self.importedGroups.takeItem(loaded_groups.index(group_name))
-                #??? If group_name is a renaming of a previously loaded group, is that bad?
+            ok = ui.popup('Group "{}" already exists. Overwrite?'
+                          .format(group_name),
+                          title='Import Group',
+                          mode='confirm')
+            if ok:
+                self.imported_groups.takeItem(loaded_groups.index(group_name))
+        #??? What if group_name is a rename of a previously loaded group?
             else:
                 return
-        source_files = [self.groupFiles.item(i).text() for i in range(self.groupFiles.count())]  #read groupfiles listview
+        w = self.group_files
+        #read groupfiles listview
+        source_files = [w.item(i).text() for i in range(w.count())]
         if not source_files:
-            DM.feedback('Group cannot have 0 associated files.')
+            dm.feedback('Group cannot have 0 associated files.')
             return
 
-        if self.verify_import_settings(source_files):#result == QDialog.Accepted:
-            source_paths = [self.path_dict[file] for file in source_files]  #path_dict is quasi global, appended gather_files (therefore, navigating to a different directory should not disconnect files from paths)
-            df = self.combine_files(source_paths)#, header_row=0, ts_col='PacketTime', dtf='%Y-%m-%d %H:%M:%S.%f')  # These kwargs are specific to PHI_HK
+        if self.verify_import_settings(source_files):
+            # path_dict is quasi global, appended gather_files
+            # therefore, navigating to a different directory
+            # should not disconnect files from paths
+            source_paths = [self.path_dict[file] for file in source_files]
+            df = self.combine_files(source_paths)
 
             if not df.empty:
-                DM.groups[group_name] = Group(df, source_files, source_paths)  # this is writing to Data_Manager's version, not AB's
-                self.importedGroups.addItem(group_name)
+                dm.groups[group_name] = Group(df)
+                self.imported_groups.addItem(group_name)
 
                 # Try to auto parse units
-                if AB.auto_parse:
-                    self.parse_series(DM.groups[group_name], DM.groups[group_name].series.keys())
+                if ui.auto_parse:
+                    self.parse_series(dm.groups[group_name].series())
 
-                DM.configure_tab.selectGroup.addItem(group_name)  # -> this emits a signal to call CT's display_header_info function
-                self.groupFiles.clear()
-                self.groupName.setText('')
-                DM.modified = True
+# -> this emits a signal to call CT's display_header_info function
+                dm.configure_tab.select_group.addItem(group_name)
+                self.group_files.clear()
+                self.group_name.setText('')
+                dm.modified = True
         else:
-            DM.feedback('Import canceled.', mode='append')
+            dm.feedback('Import canceled.', mode='append')
+
+    def parse_series(self, series):
+        dm = self.parent
+        ui = dm.parent
+        report = ''
+        for s in series:
+            header = s.header
+            parsed = ui.parse_unit(header)
+            unit, interpreted = ui.interpret_unit(parsed)
+            s.unit = unit
+            s.unit_type = ui.get_unit_type(unit)
+            if not interpreted:
+                report += header + '\n'
+            else:
+                alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
+                s.alias = alias
+                s.parent.alias_dict[alias] = header
+        if report:
+            ui.popup('Some units not assigned.',
+                     title='Unit Parse Error Log',
+                     informative=('You can assign units manually'
+                                  'under Series Configuration,'
+                                  'leave them blank, or '
+                                  'adjust unit settings and reparse.'),
+                     details=report,
+                     mode='alert')
 
     def verify_import_settings(self, source_files):
-        DM = self.parent
-        AB = DM.parent
+        dm = self.parent
+        ui = dm.parent
         counter = 1
         for file in source_files:
             mode = 'line' if counter == 1 else 'overwrite'
-            DM.feedback('Loading previews: ({}/{})... '.format(counter, len(source_files)), mode=mode)
-            DM.messageLog.repaint()
+            dm.feedback('Loading previews: ({}/{})... '
+                        .format(counter, len(source_files)),
+                        mode=mode)
+            dm.message_log.repaint()
             counter += 1
 
-            if file not in AB.path_kwargs:
-                if file.endswith('xls') or file.endswith('xlsx'):
-                    read_func = pd.read_excel
-                elif file.endswith('csv') or file.endswith('zip'):
-                    read_func = pd.read_csv
-
+            if file not in ui.path_kwargs:
                 path = self.path_dict[file]
 
-                # Read first column and take its length so you can read head and tail later without loading the whole DF into memory
-                shownRows = 20
-                n = len(read_func(path, usecols=[0], header=None, encoding='latin1').index)
+                # Read first column and take its length
+                # so you can read head and tail later
+                # without loading the whole DF into memory
+                shown_rows = 20
+                first_col = pd.read_csv(path, usecols=[0], header=None,
+                                      encoding='latin1')
+                n = len(first_col.index)
 
-                if n > shownRows:
-                    upper_df = read_func(path, nrows=shownRows//2, header=None, encoding='latin1')
-                    lower_df = read_func(path, skiprows=range(n-shownRows//2), header=None, encoding='latin1')
+                if n > shown_rows:
+                    upper_df = pd.read_csv(path,
+                                           nrows=shown_rows//2,
+                                           header=None, encoding='latin1')
+                    lower_df = pd.read_csv(path,
+                                           skiprows=range(n-shown_rows//2),
+                                           header=None, encoding='latin1')
                     ellipses = pd.DataFrame(['...']*len(upper_df.columns),
                                             index=upper_df.columns,
                                             columns=['...']).T
                     shown_df = upper_df.append(ellipses).append(lower_df)
                 else:
-                    shown_df = read_func(path, header=None, encoding='latin1')
+                    shown_df = pd.read_csv(path,
+                                           header=None, encoding='latin1')
                 self.df_preview[path] = shown_df
-                dtf, r, c, skiprows = self.interpret_data(path, read_func)
-                AB.path_kwargs[self.path_dict[file]] = {'format':dtf, 'header':r, 'index_col':c, 'skiprows':skiprows}
-        DM.feedback('Verify import settings... ', mode='append')
-        DM.messageLog.repaint()
-        self.importsettings = Import_Settings(self, source_files)
-        self.importsettings.setModal(True)
-        return self.importsettings.exec()
-
-    def parse_series(self, group, headers):
-        DM = self.parent
-        AB = DM.parent
-        report = ''
-        for header in headers:
-            parsed = AB.parse_unit(header)
-            unit, interpreted = AB.interpret_unit(parsed)
-            group.series[header].unit = unit
-            group.series[header].unit_type = AB.get_unit_type(unit)
-            if not interpreted:
-                report += header + '\n'
-            else:
-                alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
-                group.series[header].alias = alias
-                group.alias_dict[alias] = header
-        if report:
-            AB.popup('Some units not assigned.',
-                     title='Unit Parse Error Log',
-                     informative='You can assign units manually under Series Configuration, leave them blank, or adjust unit settings and reparse.',
-                     details=report,
-                     icon=False,
-                     mode='alert')
+                dtf, r, c, skiprows = self.interpret_data(path)
+                ui.path_kwargs[path] = {'format': dtf,
+                                        'header': r,
+                                        'index_col': c,
+                                        'skiprows': skiprows}
+        dm.feedback('Verify import settings... ', mode='append')
+        dm.message_log.repaint()
+        dlg = ImportSettings(self, source_files)
+        dlg.setModal(True)
+        return dlg.exec()
 
     def delete_group(self):
-        DM = self.parent
-        AB = DM.parent
+        dm = self.parent
+        ui = dm.parent
         try:
-            item = self.importedGroups.selectedItems()[0]
+            item = self.imported_groups.selectedItems()[0]
             group_name = item.text()
-            if AB.popup('Delete group "{}"?'.format(group_name), mode='confirm') == QMessageBox.Ok:
-                self.importedGroups.takeItem(self.importedGroups.row(item))
-                del DM.groups[group_name]
+            ok = ui.popup('Delete group "{}"?'.format(group_name),
+                          mode='confirm')
+            if ok:
+                self.imported_groups.takeItem(self.imported_groups.row(item))
+                del dm.groups[group_name]
 
-                # delete the corresponding entry in group_reassign (if it exists)
-                for name in DM.group_reassign:
-                    if group_name == DM.group_reassign[name][-1]:
-                        del DM.group_reassign[name]
-                        DM.modified = True  # only modified if the deleted group was loaded into AB
+                # delete corresponding entry in group_reassign (if it exists)
+                for name in dm.group_reassign:
+                    if group_name == dm.group_reassign[name][-1]:
+                        del dm.group_reassign[name]
+                        # only modified if the deleted group was loaded into ui
+                        dm.modified = True
                         break
-                DM.configure_tab.selectGroup.removeItem(DM.configure_tab.selectGroup.findText(group_name))
+                w = dm.configure_tab.select_group
+                w.removeItem(w.findText(group_name))
         except IndexError as e:
             print(e)

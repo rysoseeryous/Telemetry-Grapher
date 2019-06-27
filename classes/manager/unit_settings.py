@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QDialog,
 from PyQt5.QtGui import QIcon, QBrush, QColor
 from PyQt5.QtCore import Qt
 
-class Unit_Settings(QDialog):
+class UnitSettings(QDialog):
 
     def __init__(self, parent):
         super().__init__()
@@ -19,20 +19,21 @@ class Unit_Settings(QDialog):
         self.setWindowTitle('Unit Settings')
         self.setWindowIcon(QIcon('rc/satellite.png'))
 #        self.setFixedSize(200,333)
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
 
         vbox = QVBoxLayout()
 
         form = QFormLayout()
-        self.autoParseCheck = QCheckBox('Automatically parse units from headers')
-        self.autoParseCheck.setChecked(AB.auto_parse)
+        self.autoParseCheck = QCheckBox('Automatically parse'
+                                        'units from headers')
+        self.autoParseCheck.setChecked(ui.auto_parse)
         self.autoParseCheck.stateChanged.connect(self.toggle_auto_parse)
         form.addRow(self.autoParseCheck)
 
         self.baseType = QComboBox()
-        self.baseType.addItems(list(AB.unit_dict.keys()))
+        self.baseType.addItems(list(ui.unit_dict.keys()))
         self.baseType.currentIndexChanged.connect(self.update_pht)
         form.addRow('Base Unit Types', self.baseType)
 
@@ -42,9 +43,9 @@ class Unit_Settings(QDialog):
         form.addRow(self.newType)
         self.userUnits = QComboBox()
         entries = []
-        for userType in AB.user_units:
-            for baseType in AB.unit_dict:
-                if AB.user_units[userType] == AB.unit_dict[baseType]:
+        for userType in ui.user_units:
+            for baseType in ui.unit_dict:
+                if ui.user_units[userType] == ui.unit_dict[baseType]:
                     entries.append('{} ({})'.format(userType, baseType))
                     break
         self.userUnits.addItems(entries)
@@ -53,18 +54,19 @@ class Unit_Settings(QDialog):
         form.addRow(self.delete, self.userUnits)
         self.defaultType = QLineEdit()
         self.defaultType.setPlaceholderText('None')
-        if AB.default_type: self.defaultType.setText(AB.default_type)
+        if ui.default_type: self.defaultType.setText(ui.default_type)
         form.addRow('Set Default Type', self.defaultType)
         self.defaultUnit = QLineEdit()
         self.defaultUnit.setPlaceholderText('None')
-        if AB.default_unit: self.defaultUnit.setText(AB.default_unit)
+        if ui.default_unit: self.defaultUnit.setText(ui.default_unit)
         form.addRow('Set Default Unit', self.defaultUnit)
         vbox.addLayout(form)
 
         self.clarified = QTableWidget()
         self.clarified.setColumnCount(2)
         self.clarified.setHorizontalHeaderLabels(['Parsed', 'Interpreted'])
-        self.clarified.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        h_header = self.clarified.horizontalHeader()
+        h_header.setSectionResizeMode(QHeaderView.Stretch)
         self.clarified.verticalHeader().hide()
         self.clarified.cellChanged.connect(self.reset_background)
         self.populate_clarified()
@@ -83,77 +85,79 @@ class Unit_Settings(QDialog):
         self.setLayout(vbox)
 
     def toggle_auto_parse(self):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
-        AB.auto_parse = self.autoParseCheck.isChecked()
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
+        ui.auto_parse = self.autoParseCheck.isChecked()
 
     def update_pht(self):
         baseType = self.baseType.currentText()
         self.newType.setPlaceholderText('New unit type ({})'.format(baseType))
 
     def add_user_type(self):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
         newType = self.newType.text().strip()
         baseType = self.baseType.currentText()
-        all_units = {**AB.unit_dict, **AB.user_units}
+        all_units = {**ui.unit_dict, **ui.user_units}
         if newType and newType not in all_units:
-            AB.user_units.update({newType: AB.unit_dict[baseType]})
+            ui.user_units.update({newType: ui.unit_dict[baseType]})
             entry = '{} ({})'.format(newType, baseType)
             self.userUnits.addItem(entry)
             self.userUnits.setCurrentText(entry)
 
     def delete_user_type(self):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
         entry = self.userUnits.currentText()
         userType = entry[:entry.rindex('(')-1]
-        del AB.user_units[userType]
+        del ui.user_units[userType]
         self.userUnits.removeItem(self.userUnits.currentIndex())
 
     def populate_clarified(self):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
-        self.clarified.setRowCount(len(AB.unit_clarify))
-        for r, key in enumerate(AB.unit_clarify):
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
+        self.clarified.setRowCount(len(ui.unit_clarify))
+        for r, key in enumerate(ui.unit_clarify):
             self.clarified.setItem(r, 0, QTableWidgetItem(key))
             key_clar = QComboBox()
-            key_clar.addItems([x for unit_list in AB.unit_dict.values() for x in unit_list])
-            key_clar.setCurrentText(AB.unit_clarify[key])
+            items = [u for units in ui.unit_dict.values() for u in units]
+            key_clar.addItems(items)
+            key_clar.setCurrentText(ui.unit_clarify[key])
             self.clarified.setCellWidget(r, 1, key_clar)
 
     def add_clarified_row(self):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
         self.clarified.setRowCount(self.clarified.rowCount()+1)
         key_clar = QComboBox()
-        key_clar.addItems([x for unit_list in AB.unit_dict.values() for x in unit_list])
+        items = [u for units in ui.unit_dict.values() for u in units]
+        key_clar.addItems(items)
         self.clarified.setCellWidget(self.clarified.rowCount()-1, 1, key_clar)
 
     def delete_clarified_row(self):
-        rows_to_delete = set([item.row() for item in self.clarified.selectedIndexes()])
-        for r in sorted(rows_to_delete, reverse=True):
+        all_rows = [item.row() for item in self.clarified.selectedIndexes()]
+        for r in sorted(set(all_rows), reverse=True):
             self.clarified.removeRow(r)
 
     def reset_background(self, row, column):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
-        if AB.current_rcs == AB.dark_rcs:
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
+        if ui.current_rcs == ui.dark_rcs:
             bg = QColor.fromRgb(35, 38, 41)
         else:
             bg = QColor.fromRgb(255, 255, 255)
         self.clarified.item(row, column).setBackground(QBrush(bg))
 
     def closeEvent(self, event):
-        CT = self.parent
-        DM = CT.parent
-        AB = DM.parent
+        ct = self.parent
+        dm = ct.parent
+        ui = dm.parent
         keys, values = [], []
         ok = True
         for r in range(self.clarified.rowCount()):
@@ -162,27 +166,22 @@ class Unit_Settings(QDialog):
                 if key.strip():
                     if key not in keys:
                         keys.append(key)
-                        values.append(self.clarified.cellWidget(r, 1).currentText())
+                        value = self.clarified.cellWidget(r, 1).currentText()
+                        values.append(value)
                     else:
                         self.clarified.blockSignals(True)
-                        # have it just select the duplicates instead of highlighting red?
-                        self.clarified.item(r, 0).setBackground(QBrush(QColor.fromRgb(255, 50, 50)))
+                        # select the duplicates instead of highlighting red?
+                        self.clarified.item(r, 0).setBackground(QBrush(
+                                QColor.fromRgb(255, 50, 50)))
                         self.clarified.blockSignals(False)
                         ok = False
             except AttributeError:
                 continue
         if ok:
-            AB.unit_clarify = dict(zip(keys,values))
-            AB.default_type = self.defaultType.text().strip()
-            AB.default_unit = self.defaultUnit.text().strip()
-            AB.figure_settings.update_unit_table()
-
-# some strange behavior with this code. Leave out if not necessary. User now needs to explicitly click 'reparse units'.
-#            group_name = CT.selectGroup.currentText()
-#            if group_name:
-#                group = DM.groups[group_name]
-#                DM.configure_tab.populate_headerTable(group)
-
+            ui.unit_clarify = dict(zip(keys,values))
+            ui.default_type = self.defaultType.text().strip()
+            ui.default_unit = self.defaultUnit.text().strip()
+            ui.figure_settings.update_unit_table()  #???
             event.accept()
         else:
             event.ignore()

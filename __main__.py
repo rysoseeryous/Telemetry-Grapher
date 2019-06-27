@@ -13,7 +13,7 @@ from PyQt5.QtCore import QCoreApplication
 # If you want to run from Anaconda Prompt, this should be .classes.ab
 # But doing that executes without error but doesn't actually open the app
 # *shrug*
-from classes.toplevel.application_base import Application_Base
+from classes.toplevel.main_window import UI
 
 # Allows logging of unhandled exceptions
 logger = logging.getLogger(__name__)
@@ -35,5 +35,5 @@ if 'app' not in locals():
     app = QCoreApplication.instance()
 if app is None:  # otherwise kernel dies
     app = QApplication(sys.argv)
-X = Application_Base(logger=logger)#, groups={'test': test_group})
+_ = UI(logger=logger)#, groups={'test': test_group})
 app.exec_()

@@ -2,7 +2,3 @@ DEBUG:matplotlib.font_manager:findfont: Matching :family=sans-serif:style=normal
 DEBUG:matplotlib.font_manager:findfont: Matching :family=sans-serif:style=normal:variant=normal:weight=normal:stretch=normal:size=30.0 to DejaVu Sans ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSans.ttf') with score of 0.050000
 DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=10.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
 DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=30.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
-DEBUG:matplotlib.font_manager:findfont: Matching :family=serif:style=normal:variant=normal:weight=normal:stretch=normal:size=12.0 to DejaVu Serif ('C:\\ProgramData\\Anaconda\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSerif.ttf') with score of 0.050000
-ERROR:__main__:Unable to load dark stylesheet,"<PyQt5.QtCore.QFile object at 0x000002184F6B20D8>" not found
-ERROR:__main__:Unable to load dark stylesheet,"<built-in method fileName of QFile object at 0x0000021851768DC8>" not found
-ERROR:__main__:Unable to load dark stylesheet,"rc/ddfgark.qss" not found

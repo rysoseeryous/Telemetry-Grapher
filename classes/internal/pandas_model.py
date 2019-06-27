@@ -7,7 +7,7 @@ Created on Thu Jun 13 15:52:07 2019
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtCore import Qt
 
-class Pandas_Model(QStandardItemModel):
+class PandasModel(QStandardItemModel):
 
     def __init__(self, data, parent=None):
         QStandardItemModel.__init__(self, parent)

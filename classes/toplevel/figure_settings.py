@@ -7,7 +7,7 @@ Created on Thu Jun 13 15:48:55 2019
 import datetime as dt
 from matplotlib import colors as mcolors
 
-from PyQt5.QtWidgets import (QWidget, QColorDialog, QInputDialog,
+from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
                              QGridLayout, QFormLayout,
                              QHBoxLayout, QVBoxLayout,
                              QGroupBox, QLabel, QCheckBox, QPushButton,
@@ -18,81 +18,73 @@ from PyQt5.QtCore import Qt, QObject
 
 from ..internal.q_color_button import QColorButton
 
-class Figure_Settings(QWidget):
+class FigureSettings(QDockWidget):
     """Contains options for controlling figure size and appearance."""
 
-    def __init__(self, parent, saved=None):
-        super().__init__()
+    def __init__(self, parent, title, saved=None):
+        super().__init__(title)
         self.parent = parent
-        AB = self.parent
-        self.markers = [  # when color coordination is on, use markers in this order to differentiate series
-                'o',
-                '+',
-                'x',
-                'D',
-                's',
-                '^',
-                'v',
-                '<',
-                '>',
-            ]
+        ui = self.parent
+        # when color coordination is on,
+        # use markers in this order to differentiate series
+        self.markers = ['o', '+', 'x', 'D', 's', '^', 'v', '<', '>']
 # add to config.json?
-
+        w = QWidget()
         vbox = QVBoxLayout()
 
-        figureGroup= QGroupBox('Figure Dimensions')
-        figureGroup.setAlignment(Qt.AlignHCenter)
+        figure_group= QGroupBox('Figure Dimensions')
+        figure_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
-        self.upperPad = QDoubleSpinBox()
-        self.upperPad.setRange(0, 0.5)
-        self.upperPad.setSingleStep(.01)
-        self.upperPad.setValue(0.07)
-        form.addRow('Upper Pad', self.upperPad)
-        self.lowerPad = QDoubleSpinBox()
-        self.lowerPad.setRange(0, 0.5)
-        self.lowerPad.setSingleStep(.01)
-        self.lowerPad.setValue(0.08)
-        form.addRow('Lower Pad', self.lowerPad)
-        self.leftPad = QDoubleSpinBox()
-        self.leftPad.setRange(0, 0.5)
-        self.leftPad.setSingleStep(.01)
-        self.leftPad.setValue(0.05)
-        form.addRow('Left Pad', self.leftPad)
-        self.rightPad = QDoubleSpinBox()
-        self.rightPad.setRange(0, 0.5)
-        self.rightPad.setSingleStep(.01)
-        self.rightPad.setValue(0.05)
-        form.addRow('Right Pad', self.rightPad)
-        self.hspace = QDoubleSpinBox()
-        self.hspace.setRange(0, 1)
-        self.hspace.setSingleStep(.01)
-        self.hspace.setValue(.05)
-        form.addRow('Spacing', self.hspace)
-        self.parOffset = QDoubleSpinBox()
-        self.parOffset.setRange(0, 1)
-        self.parOffset.setDecimals(3)
-        self.parOffset.setSingleStep(.005)
-        self.parOffset.setValue(.05)
-        form.addRow('Axis Offset', self.parOffset)
-        figureGroup.setLayout(form)
-        vbox.addWidget(figureGroup)
+        self.upper_pad = QDoubleSpinBox()
+        self.upper_pad.setRange(0, 0.5)
+        self.upper_pad.setSingleStep(.01)
+        self.upper_pad.setValue(0.07)
+        form.addRow('Upper Pad', self.upper_pad)
+        self.lower_pad = QDoubleSpinBox()
+        self.lower_pad.setRange(0, 0.5)
+        self.lower_pad.setSingleStep(.01)
+        self.lower_pad.setValue(0.08)
+        form.addRow('Lower Pad', self.lower_pad)
+        self.left_pad = QDoubleSpinBox()
+        self.left_pad.setRange(0, 0.5)
+        self.left_pad.setSingleStep(.01)
+        self.left_pad.setValue(0.05)
+        form.addRow('Left Pad', self.left_pad)
+        self.right_pad = QDoubleSpinBox()
+        self.right_pad.setRange(0, 0.5)
+        self.right_pad.setSingleStep(.01)
+        self.right_pad.setValue(0.05)
+        form.addRow('Right Pad', self.right_pad)
+        self.spacing = QDoubleSpinBox()
+        self.spacing.setRange(0, 1)
+        self.spacing.setSingleStep(.01)
+        self.spacing.setValue(.05)
+        form.addRow('Spacing', self.spacing)
+        self.axis_offset = QDoubleSpinBox()
+        self.axis_offset.setRange(0, 1)
+        self.axis_offset.setDecimals(3)
+        self.axis_offset.setSingleStep(.005)
+        self.axis_offset.setValue(.05)
+        form.addRow('Axis Offset', self.axis_offset)
+        figure_group.setLayout(form)
+        vbox.addWidget(figure_group)
 
-        gridGroup = QGroupBox('Grid Settings')
-        gridGroup.setAlignment(Qt.AlignHCenter)
+        grid_group = QGroupBox('Grid Settings')
+        grid_group.setAlignment(Qt.AlignHCenter)
         grid = QGridLayout()
-        self.majorXgrid = QCheckBox('Major X')
-        grid.addWidget(self.majorXgrid, 0, 0)
-        self.minorXgrid = QCheckBox('Minor X')
-        grid.addWidget(self.minorXgrid, 0, 1)
-        self.majorYgrid = QCheckBox('Major Y')
-        grid.addWidget(self.majorYgrid, 1, 0)
-        self.minorYgrid = QCheckBox('Minor Y')
-        grid.addWidget(self.minorYgrid, 1, 1)
-        gridGroup.setLayout(grid)
-        vbox.addWidget(gridGroup)
+        self.major_x = QCheckBox('Major X')
+        grid.addWidget(self.major_x, 0, 0)
+        self.minor_x = QCheckBox('Minor X')
+        grid.addWidget(self.minor_x, 0, 1)
+        self.major_y = QCheckBox('Major Y')
+        grid.addWidget(self.major_y, 1, 0)
+        self.minor_y = QCheckBox('Minor Y')
+        grid.addWidget(self.minor_y, 1, 1)
+        grid_group.setLayout(grid)
+        vbox.addWidget(grid_group)
 
-        plotGroup = QGroupBox('Plot Settings')
-        plotGroup.setAlignment(Qt.AlignHCenter)
+        plot_group = QGroupBox('Plot Settings')
+        plot_group.setAlignment(Qt.AlignHCenter)
         grid = QGridLayout()
         self.line = QRadioButton('Line')
         grid.addWidget(self.line, 0, 0)
@@ -100,11 +92,11 @@ class Figure_Settings(QWidget):
         self.scatter.setChecked(True)
         grid.addWidget(self.scatter, 0, 1)
         grid.addWidget(QLabel('Marker Size'), 1, 0)
-        self.dotsize = QDoubleSpinBox()
-        self.dotsize.setRange(0, 5)
-        self.dotsize.setSingleStep(.1)
-        self.dotsize.setValue(0.5)
-        grid.addWidget(self.dotsize, 1, 1)
+        self.dot_size = QDoubleSpinBox()
+        self.dot_size.setRange(0, 5)
+        self.dot_size.setSingleStep(.1)
+        self.dot_size.setValue(0.5)
+        grid.addWidget(self.dot_size, 1, 1)
         grid.addWidget(QLabel('Plot Density'), 2, 0)
         self.density = QSpinBox()
         self.density.setRange(1, 100)
@@ -112,84 +104,84 @@ class Figure_Settings(QWidget):
         self.density.setValue(100)
         self.density.setSuffix('%')
         grid.addWidget(self.density, 2, 1)
-        plotGroup.setLayout(grid)
-        vbox.addWidget(plotGroup)
+        plot_group.setLayout(grid)
+        vbox.addWidget(plot_group)
 
-        textGroup = QGroupBox('Text Settings')
-        textGroup.setAlignment(Qt.AlignHCenter)
+        text_group = QGroupBox('Text Settings')
+        text_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
-        self.titleSize = QSpinBox()
-        self.titleSize.setRange(0, 60)
-        self.titleSize.setValue(30)
-        form.addRow('Title', self.titleSize)
-        self.labelSize = QSpinBox()
-        self.labelSize.setRange(0, 30)
-        self.labelSize.setValue(12)
-        form.addRow('Axis Labels', self.labelSize)
-        self.tickSize = QSpinBox()
-        self.tickSize.setRange(0, 20)
-        self.tickSize.setValue(10)
-        form.addRow('Tick Size', self.tickSize)
-        self.tickRot = QSpinBox()
-        self.tickRot.setRange(0, 90)
-        self.tickRot.setValue(45)
-        form.addRow('Tick Rotation', self.tickRot)
+        self.title_size = QSpinBox()
+        self.title_size.setRange(0, 60)
+        self.title_size.setValue(30)
+        form.addRow('Title', self.title_size)
+        self.label_size = QSpinBox()
+        self.label_size.setRange(0, 30)
+        self.label_size.setValue(12)
+        form.addRow('Axis Labels', self.label_size)
+        self.tick_size = QSpinBox()
+        self.tick_size.setRange(0, 20)
+        self.tick_size.setValue(10)
+        form.addRow('Tick Size', self.tick_size)
+        self.tick_rot = QSpinBox()
+        self.tick_rot.setRange(0, 90)
+        self.tick_rot.setValue(45)
+        form.addRow('Tick Rotation', self.tick_rot)
         self.tsf = QPushButton('Timestamp Format')
         self.tsf.clicked.connect(self.edit_timestamp_format)
         self.timestamp_format = '%b %d, %H:%M'
         form.addRow(self.tsf)
-        textGroup.setLayout(form)
-        vbox.addWidget(textGroup)
+        text_group.setLayout(form)
+        vbox.addWidget(text_group)
 
         self.unit_table = QTableWidget()
         self.unit_table.setFixedWidth(123)
         self.unit_table.setColumnCount(2)
-        self.unit_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.unit_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.unit_table.horizontalHeader().hide()
-        self.unit_table.verticalHeader().hide()
-        self.unit_table.verticalHeader().setDefaultSectionSize(self.unit_table.verticalHeader().minimumSectionSize())
-        self.unit_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        h_header = self.unit_table.horizontalHeader()
+        h_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        h_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        h_header.hide()
+        v_header = self.unit_table.verticalHeader()
+        v_header.hide()
+        v_header.setDefaultSectionSize(v_header.minimumSectionSize())
+        v_header.setSectionResizeMode(QHeaderView.Fixed)
         self.unit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         vbox.addWidget(self.unit_table)
-        self.setLayout(vbox)
+        w.setLayout(vbox)
+        self.setWidget(w)
 
         self.dlg = QColorDialog()
         self.dlg.setWindowIcon(QIcon('rc/satellite.png'))
-        default_color = AB.current_rcs['axes.labelcolor']
+        default_color = ui.current_rcs['axes.labelcolor']
         self.color_dict = {None:default_color, '':default_color}
         self.update_unit_table()
 
     def edit_timestamp_format(self):
         tsf_dlg = QInputDialog()
-        codes = {
-                'Code': 'Description\tValues',
-                '': '',
-                '%d': 'Day of month\t[1-31]',
-                '%-d': 'Day of month\t[01-31]',
-                '%b': 'Short month\t[Jan-Dec]',
-                '%B': 'Long month\t[January-December]',
-                '%m': 'Month zero-pad\t[01-12]',
-                '%-m': 'Month\t\t[1-12]',
-                '%y': 'Short year\t[00-99]',
-                '%Y': 'Year with century\t[2000-2099]',
-                '%H': '24-Hour zero-pad\t[00-23]',
-                '%-H': '24-Hour\t\t[0-23]',
-                '%I': '12-Hour zero-pad\t[01-12]',
-                '%-I': '12-Hour\t\t[1-12]',
-                '%M': 'Minute zero-pad\t[00-59]',
-                '%S': 'Second zero-pad\t[00-59]',
-                }
-        reference = ''
-        for code, ex in codes.items():
-            reference += code + '\t' + ex + '\n'
-        reference += '\nSee strftime.org for more details'
-        text, ok = tsf_dlg.getText(
-                self,
-                'Edit Timestamp Format',
-                reference,
-                text=self.timestamp_format
+        codes = (
+                ('Code', 'Description', 'Values'),
+                ('', '', ''),
+                ('%d', 'Day of month', '[1-31]'),
+                ('%-d', 'Day of month', '[01-31]'),
+                ('%b', 'Short month', '[Jan-Dec]'),
+                ('%B', 'Long month', '[January-December]'),
+                ('%m', 'Month zero-pad', '[01-12]'),
+                ('%-m', 'Month\t', '[1-12]'),
+                ('%y', 'Short year', '[00-99]'),
+                ('%Y', 'Year with century', '[2000-2099]'),
+                ('%H', '24-Hour zero-pad', '[00-23]'),
+                ('%-H', '24-Hour\t', '[0-23]'),
+                ('%I', '12-Hour zero-pad', '[01-12]'),
+                ('%-I', '12-Hour\t', '[1-12]'),
+                ('%M', 'Minute zero-pad', '[00-59]'),
+                ('%S', 'Second zero-pad', '[00-59]'),
                 )
+        reference = ''
+        for code in codes:
+            reference += '{}\t{}\t{}\n'.format(*code)
+#            reference += code + '\t' + ex + '\n'
+        reference += '\nSee strftime.org for more details'
+        text, ok = tsf_dlg.getText(self, 'Edit Timestamp Format',
+                                   reference, text=self.timestamp_format)
         if ok:
             try:
                 dt.datetime.now().strftime(text)
@@ -199,17 +191,19 @@ class Figure_Settings(QWidget):
 
     def update_unit_table(self):
         """Updates table associating unit types with colors."""
-        AB = self.parent
-        all_units = {**AB.unit_dict, **AB.user_units}
+        ui = self.parent
+        all_units = {**ui.unit_dict, **ui.user_units}
         self.unit_table.setRowCount(len(all_units))
         for i, unit_type in enumerate(all_units):
             if unit_type not in self.color_dict:
                 self.color_dict.update({unit_type:'C'+str(i%10)})
         for i, unit_type in enumerate(all_units):
-            self.dlg.setCustomColor(i, QColor(mcolors.to_hex(self.color_dict[unit_type])))
+            color = QColor(mcolors.to_hex(self.color_dict[unit_type]))
+            self.dlg.setCustomColor(i, color)
         for i, unit_type in enumerate(all_units):
             self.unit_table.setItem(i, 0, QTableWidgetItem(unit_type))
-            colorButton = QColorButton(self, mcolors.to_hex(self.color_dict[unit_type]), unit_type)
+            color = mcolors.to_hex(self.color_dict[unit_type])
+            colorButton = QColorButton(self, color, unit_type)
             colorButton.clicked.connect(self.pick_color)
             _widget = QWidget()
             _layout = QHBoxLayout(_widget)
@@ -222,27 +216,27 @@ class Figure_Settings(QWidget):
         """Connects widgets to refresh_all() in Axes Frame.
         Called by Application Base after Axes Frame has been instantiated."""
         widgets = [  # spin boxes
-                self.upperPad,
-                self.lowerPad,
-                self.leftPad,
-                self.rightPad,
-                self.hspace,
-                self.parOffset,
-                self.dotsize,
-                self.titleSize,
-                self.labelSize,
-                self.tickSize,
-                self.tickRot,
+                self.upper_pad,
+                self.lower_pad,
+                self.left_pad,
+                self.right_pad,
+                self.spacing,
+                self.axis_offset,
+                self.dot_size,
+                self.title_size,
+                self.label_size,
+                self.tick_size,
+                self.tick_rot,
                 self.density,
                 ]
         for w in widgets:
             w.valueChanged.connect(container.refresh_all)
 
         widgets = [  # check boxes
-                self.majorXgrid,
-                self.minorXgrid,
-                self.majorYgrid,
-                self.minorYgrid,
+                self.major_x,
+                self.minor_x,
+                self.major_y,
+                self.minor_y,
                 self.line,
                 self.scatter,
                 ]
@@ -252,16 +246,17 @@ class Figure_Settings(QWidget):
         self.tsf.clicked.connect(container.refresh_all)
 
     def pick_color(self):
-        """Opens a color picker dialog and assigns it to the associated unit type."""
-        colorButton = QObject.sender(self)
-        unit_type = colorButton.unit_type
-        if colorButton.color:
-            self.dlg.setCurrentColor(QColor(colorButton.color))
+        """Opens a color picker dialog and assigns it to the unit type."""
+        color_button = QObject.sender(self)
+        unit_type = color_button.unit_type
+        if color_button.color:
+            self.dlg.setCurrentColor(QColor(color_button.color))
 
         if self.dlg.exec_():
-            colorButton.color = self.dlg.currentColor().name()
-            colorButton.setStyleSheet("background-color:{};".format(colorButton.color))
-            self.color_dict[unit_type] = colorButton.color
-            AB = self.parent
-            AF = AB.axes_frame
-            AF.refresh_all()
+            color_button.color = self.dlg.currentColor().name()
+            color_button.setStyleSheet(
+                    "background-color:{};".format(color_button.color))
+            self.color_dict[unit_type] = color_button.color
+            ui = self.parent
+            af = ui.axes_frame
+            af.refresh_all()

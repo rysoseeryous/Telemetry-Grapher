@@ -8,38 +8,39 @@ import math
 import functools
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigCanvas
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 
-from ..internal.subplot_manager import Subplot_Manager
+from ..internal.subplot_manager import SubplotManager
 
-class Axes_Frame(FigureCanvas):
+class AxesFrame(FigCanvas):
     """Central widget in Application Base main window."""
 
     def __init__(self, parent):
-        self.parent = parent
-        AB = self.parent
-        CF = AB.control_frame
-        FS = AB.figure_settings
         self.fig = plt.figure()
         super().__init__(self.fig)
+        self.parent = parent
+        ui = self.parent
+        cp = ui.control_panel
+        fs = ui.figure_settings
         self.weights = [1]
-        left = FS.leftPad.value()
-        right = 1 - FS.rightPad.value()
-        bottom = FS.lowerPad.value()
-        top = 1 - FS.upperPad.value()
+        left = fs.left_pad.value()
+        right = 1 - fs.right_pad.value()
+        bottom = fs.lower_pad.value()
+        top = 1 - fs.upper_pad.value()
         gs = GridSpec(1, 1, left=left, right=right, bottom=bottom, top=top)
         ax0 = self.fig.add_subplot(gs[0])
         ax0.tick_params(axis='x', labelbottom=False, bottom=False)
-        self.subplots = [Subplot_Manager(parent, ax0, index=0, contents={})]
+        self.subplots = [SubplotManager(parent, ax0)]
         self.current_sps = []
+#        self.refresh_all()
         # holds all unplotted data (unique to each Axes Frame object
         # see plans for excel tab implementation)
-        self.available_data = AB.groups_to_contents(AB.groups)
+        self.available_data = ui.groups_to_contents(ui.groups)
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
-        self.fig.suptitle(CF.titleEdit.text(), fontsize=FS.titleSize.value())
+        self.fig.suptitle(cp.title_edit.text(), fontsize=fs.title_size.value())
         self.draw()
 
     def refresh_all(self):
@@ -48,10 +49,9 @@ class Axes_Frame(FigureCanvas):
             - Any value in Figure Settings is updated
             - Subplots are modified in any way
             - User calls via Edit menu (Ctrl+R)"""
-#        print(inspect.stack())
-        AB = self.parent
-        FS = AB.figure_settings
-        CF = AB.control_frame
+        ui = self.parent
+        fs = ui.figure_settings
+        cp = ui.control_panel
         reselect = [sp.index for sp in self.current_sps]
         for ax in self.fig.axes: ax.remove()
 
@@ -60,33 +60,33 @@ class Axes_Frame(FigureCanvas):
         for sp in self.subplots:
             c1 = sp.legend
             c2 = sp.contents
-            c3 = sp.legendLocation=='Outside Right'
+            c3 = sp.location=='Outside Right'
             if c1 and c2 and c3:
                 n += 1
                 break
 
-        left = FS.leftPad.value()
-        right = 1 - FS.rightPad.value() - FS.parOffset.value()*n
-        bottom = FS.lowerPad.value()
-        top = 1 - FS.upperPad.value()
+        left = fs.left_pad.value()
+        right = 1 - fs.right_pad.value() - fs.axis_offset.value()*n
+        bottom = fs.lower_pad.value()
+        top = 1 - fs.upper_pad.value()
         gs = GridSpec(len(self.subplots), 1,
                       height_ratios=self.weights,
                       left=left, right=right, bottom=bottom, top=top,
-                      hspace=FS.hspace.value())
+                      hspace=fs.spacing.value())
         for i, sp in enumerate(self.subplots):
-            ax = self.fig.add_subplot(gs[i, 0])
+            ax = self.fig.add_subplot(gs[i])
             sp.axes = [ax]
             sp.index = i
             sp.plot()
 
-        self.fig.suptitle(CF.titleEdit.text(), fontsize=FS.titleSize.value())
+        self.fig.suptitle(cp.title_edit.text(), fontsize=fs.title_size.value())
 
-        CF.cleanup_axes()
+        cp.cleanup_axes()
         g = functools.reduce(math.gcd, self.weights)
         # simplify weights by their greatest common denominator
         # (eg [2,2,4] -> [1,1,2])
         self.weights = [w//g for w in self.weights]
-        CF.weightsEdit.setText(str(self.weights))
+        cp.weights_edit.setText(str(self.weights))
 
         try:
             fs = [self.subplots[i] for i in reselect]
@@ -98,7 +98,13 @@ class Axes_Frame(FigureCanvas):
             self.draw()
 #            pass
             # select_subplot calls self.draw(), don't need to do it again
-        AB.saved = False
+        ui.saved = False
+
+    def get_subplot(self, event):
+        for sp in self.subplots:
+            if event.inaxes in sp.axes:
+                return sp
+        return None
 
     def select_subplot(self, event, force_select=None):
         """Controls highlighting and contents display.
@@ -106,11 +112,11 @@ class Axes_Frame(FigureCanvas):
         Click within figure but outside subplots to deselect axis.
         Provide force_select=X to select subplots in list X
         where X is a list of Subplot_Manager objects."""
-        AB = self.parent
-        CF = AB.control_frame
-        SF = AB.series_frame
+        ui = self.parent
+        cp = ui.control_panel
+        sd = ui.series_display
         widths = {True: 1.5, False: 0.5}
-        SF.plotted.clear()
+        sd.plotted.clear()
         modifiers = QApplication.keyboardModifiers()
 
         def highlight(sps, invert=False):
@@ -138,10 +144,7 @@ class Axes_Frame(FigureCanvas):
                 self.current_sps = []
             else:
                 #find out which Subplot_Manager contains event-selected axes
-                for sm in self.subplots:
-                    if event.inaxes in sm.axes:
-                        sp = sm
-                        break
+                sp = self.get_subplot(event)
                 if modifiers == Qt.ControlModifier:
                     highlight([sp], invert=(sp in self.current_sps))
                 elif modifiers == Qt.ShiftModifier:
@@ -160,53 +163,49 @@ class Axes_Frame(FigureCanvas):
                     highlight(self.subplots, invert=True)
                     highlight([sp])
 
-        CF.legendColumns.blockSignals(True)
-        CF.legendPosition.blockSignals(True)
-        CF.legendPosition.clear()
+        cp.legend_columns.blockSignals(True)
+        cp.legend_location.blockSignals(True)
+        cp.legend_location.clear()
         if not self.current_sps:
-            CF.colorCoord.setChecked(False)
-            CF.colorCoord.setEnabled(False)
-            CF.legendToggle.setChecked(False)
-            CF.legendToggle.setEnabled(False)
-            CF.legendColumns.clear()
-            CF.legendColumns.setEnabled(False)
-            CF.legendPosition.setEnabled(False)
-            AB.statusBar().showMessage('No subplot selected')
+            cp.color_toggle.setChecked(False)
+            cp.color_toggle.setEnabled(False)
+            cp.legend_toggle.setChecked(False)
+            cp.legend_toggle.setEnabled(False)
+            cp.legend_columns.clear()
+            cp.legend_columns.setEnabled(False)
+            cp.legend_location.setEnabled(False)
+            ui.statusBar().showMessage('No subplot selected')
         else:
-            CF.colorCoord.setEnabled(True)
-            CF.legendToggle.setEnabled(True)
-            CF.legendColumns.setEnabled(True)
-            CF.legendPosition.setEnabled(True)
-            CF.legendPosition.addItems(list(CF.legend_dict.keys()))
+            cp.color_toggle.setEnabled(True)
+            cp.legend_toggle.setEnabled(True)
+            cp.legend_columns.setEnabled(True)
+            cp.legend_location.setEnabled(True)
+            cp.legend_location.addItems(list(cp.locations.keys()))
             if len(self.current_sps) == 1:
                 sp = self.current_sps[0]
-                SF.populate_tree(sp.contents, SF.plotted)
-                SF.search(SF.searchPlotted, SF.plotted, sp.contents)
-                CF.colorCoord.setChecked(sp.colorCoord)
-                CF.legendToggle.setChecked(sp.legend)
-                CF.legendColumns.setValue(sp.ncols)
-                CF.legendPosition.setCurrentText(sp.legendLocation)
-                AB.statusBar().showMessage(
-                        'Selected subplot: {}'.format(sp.index)
-                        )
+                sd.populate_tree(sp.contents, sd.plotted)
+                sd.search_plotted.textChanged.emit(sd.search_plotted.text())
+                cp.color_toggle.setChecked(sp.color_coord)
+                cp.legend_toggle.setChecked(sp.legend)
+                cp.legend_columns.setValue(sp.ncols)
+                cp.legend_location.setCurrentText(sp.location)
+                ui.statusBar().showMessage(
+                        'Selected subplot: {}'.format(sp.index))
             else:
-                SF.plotted.clear()
-                any_colored = any([sp.colorCoord for sp in self.current_sps])
-                CF.colorCoord.setChecked(any_colored)
+                sd.plotted.clear()
+                any_colored = any([sp.color_coord for sp in self.current_sps])
+                cp.color_toggle.setChecked(any_colored)
                 any_legend = any([sp.legend for sp in self.current_sps])
-                CF.legendToggle.setChecked(any_legend)
+                cp.legend_toggle.setChecked(any_legend)
                 selected_cols = [sp.ncols for sp in self.current_sps]
                 if all(x==selected_cols[0] for x in selected_cols):
-                    CF.legendColumns.setValue(selected_cols[0])
+                    cp.legend_columns.setValue(selected_cols[0])
                 else:
-                    CF.legendColumns.clear()
-                CF.legendPosition.setCurrentText(
-                        self.current_sps[0].legendLocation
-                        )
+                    cp.legend_columns.clear()
+                cp.legend_location.setCurrentText(self.current_sps[0].location)
                 selected = sorted([sp.index for sp in self.current_sps])
-                AB.statusBar().showMessage(
-                        'Selected subplots: {}'.format(selected)
-                        )
-        CF.legendColumns.blockSignals(False)
-        CF.legendPosition.blockSignals(False)
+                ui.statusBar().showMessage(
+                        'Selected subplots: {}'.format(selected))
+        cp.legend_columns.blockSignals(False)
+        cp.legend_location.blockSignals(False)
         self.draw()
