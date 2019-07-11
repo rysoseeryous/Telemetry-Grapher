@@ -14,7 +14,7 @@ class Series():
         self.alias = alias
         self.unit_type = unit_type
         self.unit = unit
-#        self.scale = scale
+        self.scale = scale
         self.keep = keep
 
     def summarize(self):
@@ -22,5 +22,5 @@ class Series():
                 'Alias: '+str(self.alias),
                 'Unit Type: '+str(self.unit_type),
                 'Unit: '+str(self.unit),
-#                'Scale: '+str(self.scale),
+                'Scale: '+str(self.scale),
                 'Keep: '+str(self.keep))
