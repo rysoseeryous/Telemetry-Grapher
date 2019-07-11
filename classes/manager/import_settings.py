@@ -7,6 +7,7 @@ Created on Thu Jun 13 15:51:06 2019
 import io
 import csv
 import copy
+import pandas as pd
 
 from PyQt5.QtWidgets import (QApplication, QDialog,
                              QVBoxLayout,
@@ -57,6 +58,10 @@ class ImportSettings(QDialog):
         splitter.addWidget(w)
 
         self.previewTable = QTableView()
+        self.proxy = QSortFilterProxyModel()
+        self.model = PandasModel(pd.DataFrame())
+        self.proxy.setSourceModel(self.model)
+        self.previewTable.setModel(self.proxy)
         self.previewTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
         v_header = self.previewTable.verticalHeader()
         v_header.setDefaultSectionSize(v_header.minimumSectionSize())
@@ -197,9 +202,9 @@ class ImportSettings(QDialog):
                 path = gt.path_dict[file]
                 shown_df = gt.df_preview[path]
                 self.model = PandasModel(shown_df)
-                self.proxy = QSortFilterProxyModel()
+#                self.proxy = QSortFilterProxyModel()
                 self.proxy.setSourceModel(self.model)
-                self.previewTable.setModel(self.proxy)
+#                self.previewTable.setModel(self.proxy)
                 h_header = self.previewTable.horizontalHeader()
                 h_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
@@ -232,9 +237,13 @@ class ImportSettings(QDialog):
                                            QBrush(QColor.fromRgb(0, 170, 255)),
                                            Qt.BackgroundRole)
             else:
-                if hasattr(self, 'proxy'): self.proxy.deleteLater()
+                self.model = PandasModel(pd.DataFrame())
+                self.proxy.setSourceModel(self.model)
+#                if hasattr(self, 'proxy'): self.proxy.deleteLater()
         else:
-            if hasattr(self, 'proxy'): self.proxy.deleteLater()
+            self.model = PandasModel(pd.DataFrame())
+            self.proxy.setSourceModel(self.model)
+#            if hasattr(self, 'proxy'): self.proxy.deleteLater()
 
     def keyPressEvent(self, event):
         """Enables single row copy to multirow paste.
