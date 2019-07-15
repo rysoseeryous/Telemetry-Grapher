@@ -143,7 +143,7 @@ class SubplotManager():
                         thin = np.linspace(0, n-1, num=int(n*d), dtype=int)
                         data = data.iloc[thin]
 
-#                        data = data.map(lambda x: x*s.scale)
+                        data = data.map(lambda x: x*s.scale)
 
                         if fs.scatter.isChecked():
                             line, = ax.plot(data, style, color=color,
@@ -167,7 +167,7 @@ class SubplotManager():
                                 ylabel = None
                         ax.set_ylabel(ylabel, fontsize=fs.label_size.value())
 
-                        ax.set_ylim(sp.y_limits[ax])
+#                         ax.set_ylim(sp.y_limits[ax])
 
             # Offset parasitic axes
             offset = fs.axis_offset.value()
