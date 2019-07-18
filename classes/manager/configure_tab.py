@@ -62,7 +62,7 @@ class ConfigureTab(QWidget):
         self.reparse.clicked.connect(self.reparse_units)
         vbox.addWidget(self.reparse)
 
-        self.hide_unused = QCheckBox('Hide Unused Headers')
+        self.hide_unused = QCheckBox('Hide Unused Series')
         self.hide_unused.setChecked(True)
         self.hide_unused.stateChanged.connect(self.display_header_info)
         vbox.addWidget(self.hide_unused)
@@ -126,10 +126,11 @@ class ConfigureTab(QWidget):
         group = dm.groups[group_name]
         cols = [item.column() for item in self.header_table.selectedItems()]
         headers = [self.header_table.item(2, c).text() for c in set(cols)]
-        dm.groups_tab.parse_series(group.series(headers))
+        report = dm.groups_tab.parse_series(group.series(headers))
         dm.configure_tab.header_table.blockSignals(True)
         dm.configure_tab.populate_header_table(group)
         dm.configure_tab.header_table.blockSignals(False)
+        dm.groups_tab.report_parse_error_log(report)
 
     def export_data(self):
         """Generate an CSV file for selected group.

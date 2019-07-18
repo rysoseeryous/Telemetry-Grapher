@@ -48,6 +48,8 @@ class AxesFrame(FigCanvas):
         self.fig = plt.figure()
         self.patch_figure(self.fig)
         super().__init__(self.fig)
+        self.saved = True
+        self.first_save = True
         self.parent = parent
         ui = self.parent
         self.timestamp_format = '%b %d, %H:%M'
@@ -100,6 +102,7 @@ class AxesFrame(FigCanvas):
             sp.index = i
             for ax in sp.axes:
                 ax.set_position(self.gs[i].get_position(self.fig))
+        self.saved = False
 
     def replot(self, data=True, legend=True):
         for sp in self.subplots:
@@ -107,6 +110,7 @@ class AxesFrame(FigCanvas):
                 sp.plot()
             if legend:
                 sp.show_legend()
+        self.saved = False
 
     def format_axes(self):
         """Manages figure axes ticks, tick labels."""
@@ -153,6 +157,7 @@ class AxesFrame(FigCanvas):
                         mdates.DateFormatter(self.timestamp_format))
             sp.host().xaxis.grid(which='major', b=fs.major_x.isChecked())
             sp.host().xaxis.grid(which='minor', b=fs.minor_x.isChecked())
+            self.saved = False
 
     def get_subplot(self, event):
         for sp in self.subplots:
@@ -215,7 +220,6 @@ class AxesFrame(FigCanvas):
 #                        print('    ', ax.get_frame_on())
 #                        print('    ', ax.patch.get_visible())
         self.update_toolbars()
-
 
     def update_toolbars(self):
         ui = self.parent

@@ -147,7 +147,6 @@ class DataManager(QDialog):
                         if not dm_aliases: del dm_aliases
                 except KeyError:
                     del sp.contents[sp_name]
-#            sp.plot(skeleton=True)
 
         ui.groups = self.groups
         fs.adjust_start_end()  # calls af.refresh_all()
@@ -164,6 +163,7 @@ class DataManager(QDialog):
             sd.search_plotted.textChanged.emit(sd.search_plotted.text())
         self.feedback('Saved data to main window.')
         self.modified = False
+        af.saved = False
 
     def closeEvent(self, event):
         """Asks user to save changes before exiting."""

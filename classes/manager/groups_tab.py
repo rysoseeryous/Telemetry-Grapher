@@ -360,7 +360,9 @@ class GroupsTab(QWidget):
             dm.feedback('Group cannot have 0 associated files.')
             return
 
-        if self.verify_import_settings(source_files):
+        if self.review_import_settings(source_files):
+            dm.feedback('Confirmed.', mode='append')
+            dm.message_log.repaint()
             # path_dict is quasi global, appended gather_files
             # therefore, navigating to a different directory
             # should not disconnect files from paths
@@ -373,8 +375,8 @@ class GroupsTab(QWidget):
 
                 # Try to auto parse units
                 if ui.auto_parse:
-                    self.parse_series(dm.groups[group_name].series())
-
+                    report = self.parse_series(dm.groups[group_name].series())
+                    self.report_parse_error_log(report)
 # -> this emits a signal to call CT's display_header_info function
                 dm.configure_tab.select_group.addItem(group_name)
                 self.group_files.clear()
@@ -399,6 +401,11 @@ class GroupsTab(QWidget):
                 alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
                 s.alias = alias
                 s.parent.alias_dict[alias] = header
+        return report
+
+    def report_parse_error_log(self, report):
+        dm = self.parent
+        ui = dm.parent
         if report:
             ui.popup('Some units not assigned.',
                      title='Unit Parse Error Log',
@@ -409,7 +416,7 @@ class GroupsTab(QWidget):
                      details=report,
                      mode='alert')
 
-    def verify_import_settings(self, source_files):
+    def review_import_settings(self, source_files):
         dm = self.parent
         ui = dm.parent
         counter = 1
@@ -452,7 +459,7 @@ class GroupsTab(QWidget):
                                         'header': r,
                                         'index_col': c,
                                         'skiprows': skiprows}
-        dm.feedback('Verify import settings... ', mode='append')
+        dm.feedback('Review import settings... ', mode='append')
         dm.message_log.repaint()
         dlg = ImportSettings(self, source_files)
         dlg.setModal(True)

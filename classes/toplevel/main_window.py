@@ -33,7 +33,6 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
 from .axes_frame import AxesFrame
-#from .control_panel import ControlPanel
 from .series_display import SeriesDisplay
 from .figure_settings import FigureSettings
 from .menus import FileMenu, EditMenu, ToolsMenu, ViewMenu
@@ -53,8 +52,6 @@ class UI(QMainWindow):
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
         self.auto_parse = True
-        self.saved = True
-        self.first_save = True
         self.logger = logger
 
         f = QFile('rc/dark.qss')
@@ -138,7 +135,6 @@ class UI(QMainWindow):
         self.addToolBar(self.legend_toolbar)
         self.addToolBar(self.axes_toolbar)
 
-
 #        self.figure_settings.setFixedWidth(self.figure_settings.width())
 
         self.figure_settings.adjust_start_end()
@@ -146,7 +142,13 @@ class UI(QMainWindow):
                            self.current_rcs,
                            self.current_icon_path)
 
+        self.axes_frame.saved = True
+
         self.showMaximized()
+
+        #!!! because for some reason it resizes this qcombobox??
+        self.legend_toolbar.legend_location.setMinimumWidth(100)
+        self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
 #        self.open_data_manager()
 
@@ -194,9 +196,8 @@ class UI(QMainWindow):
         af = self.axes_frame
         fs = self.figure_settings
         fs.rename()
-        af.current_sps = []
         fs.density.setValue(100)
-        af.refresh_all()
+        af.select_subplot(None, force_select=[])
 
     def save(self):
         """Quick-save feature.
@@ -204,9 +205,9 @@ class UI(QMainWindow):
         if a file by that name already exists,
         else defers to explicit Save-As dialog.
         Accessible by Telemetry Grapher's File menu (or Ctrl+S)."""
-
+        af = self.axes_frame
         filename = self.filename + '.jpg'
-        if self.first_save or filename not in os.listdir(self.fig_dir):
+        if af.first_save or filename not in os.listdir(self.fig_dir):
             self.save_as()
         else:
             self.prep_fig()
@@ -215,7 +216,7 @@ class UI(QMainWindow):
 #            with open(self.filename + '.pickle', 'wb') as f:
 #                pl.dump(af.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(self.fig_dir))
-            self.saved = True
+            af.saved = True
 
     def save_as(self):
         """Explicit Save-As feature.
@@ -223,7 +224,7 @@ class UI(QMainWindow):
         Default format is .jpg.
         Accessible by Telemetry Grapher's File menu (or Ctrl+Shift+S)."""
         self.prep_fig()
-
+        af = self.axes_frame
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.AnyFile)
         dlg.setViewMode(QFileDialog.Detail)
@@ -239,8 +240,8 @@ class UI(QMainWindow):
 #            with open(self.filename + '.pickle', 'wb') as f:
 #                pkl.dump(af.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(savepath))
-            self.saved = True
-            self.first_save = False
+            af.saved = True
+            af.first_save = False
 
     def parse_unit(self, header):
         """Parses unit information from header.
@@ -286,9 +287,10 @@ class UI(QMainWindow):
         If close event accepted,
         - hide any floating dockwidgets
         - close all created figures"""
-        self.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
-
-        if not self.saved:
+        af = self.axes_frame
+        # af.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
+        # This will change to if any([af.saved for af in axes_frames])
+        if not af.saved:
             result = self.popup('Figure has not been saved. Exit anyway?',
                                 title='Exiting Application')
             if result == QMessageBox.Cancel:
@@ -322,7 +324,6 @@ class UI(QMainWindow):
                    at.log_toggle, at.autoscale_toggle)
         for a in actions:
             a.setIcon(QIcon(icon_path+'/'+a.iconText()))
-#        lt.legend_units.setIcon(QIcon(icon_path+'/units'))
 
         for k,v in mpl_rcs.items(): plt.rcParams[k] = v
         af = self.axes_frame
@@ -350,12 +351,6 @@ class UI(QMainWindow):
                     line.set_color(mpl_rcs['grid.color'])
         af.replot()
         af.draw()
-
-
-        #!!! because for some reason it resizes this qcombobox??
-        self.legend_toolbar.legend_location.setMinimumWidth(100)
-        self.axes_toolbar.selector.setMinimumWidth(100)
-        #!!! consider axes patches, and change colors of existing features
 
     def open_fig(self):
         raise Exception
@@ -411,9 +406,6 @@ class UI(QMainWindow):
             for dock in docks: dock.show()
         else:
             for dock in docks: dock.hide()
-
-    def toggle_interactive(self):
-        pass
 
     def toggle_dark_mode(self):
         if self.mode == 'light':

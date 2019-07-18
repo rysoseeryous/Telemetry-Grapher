@@ -27,9 +27,8 @@ import copy
 import pandas as pd
 
 from PyQt5.QtWidgets import (QApplication, QDialog,
-                             QVBoxLayout,
-                             QDialogButtonBox, QSplitter,
-                             QPushButton, QLabel,
+                             QVBoxLayout, QHBoxLayout, QSizePolicy,
+                             QSplitter, QPushButton, QLabel,
                              QAbstractItemView, QHeaderView,
                              QTableView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QKeySequence, QIcon, QBrush, QColor
@@ -85,26 +84,27 @@ class ImportSettings(QDialog):
         v_header.hide()
         splitter.addWidget(self.previewTable)
 
-        self.buttonBox = QDialogButtonBox()
-        self.autoDetect = QPushButton('Auto-Detect')
-        self.autoDetect.clicked.connect(self.auto_detect)
-        self.buttonBox.addButton(self.autoDetect, QDialogButtonBox.ResetRole)
-        self.buttonBox.setStandardButtons(QDialogButtonBox.Reset |
-                                          QDialogButtonBox.Ok |
-                                          QDialogButtonBox.Cancel)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.accepted.connect(self.apply_kwargs)
-#        self.buttonBox.button(QDialogButtonBox.Ok).setAutoDefault(True)
-        self.buttonBox.rejected.connect(self.reject)
-        resetButton = self.buttonBox.button(QDialogButtonBox.Reset)
-        resetButton.clicked.connect(self.reset)
+        hbox = QHBoxLayout()
+        self.auto_detect_button = QPushButton('Auto-Detect')
+        self.auto_detect_button.clicked.connect(self.auto_detect)
+        hbox.addWidget(self.auto_detect_button)
+        self.reset_button = QPushButton('Reset')
+        self.reset_button.clicked.connect(self.reset)
+        hbox.addWidget(self.reset_button)
         self.feedback = QLabel()
-        layout = self.buttonBox.layout()
-        layout.insertWidget(2, self.feedback)
-        self.buttonBox.setLayout(layout)
+        self.feedback.setSizePolicy(QSizePolicy.MinimumExpanding,
+                                    QSizePolicy.Preferred)
+        hbox.addWidget(self.feedback)
+        self.ok_button = QPushButton('Confirm')
+        self.ok_button.clicked.connect(self.accept)
+        self.ok_button.clicked.connect(self.apply_kwargs)
+        hbox.addWidget(self.ok_button)
+        self.cancel_button = QPushButton('Cancel')
+        self.cancel_button.clicked.connect(self.reject)
+        hbox.addWidget(self.cancel_button)
 
         vbox.addWidget(splitter)
-        vbox.addWidget(self.buttonBox)
+        vbox.addLayout(hbox)
         self.setLayout(vbox)
 
         self.original_kwargs = copy.deepcopy(ui.path_kwargs)
@@ -174,6 +174,7 @@ class ImportSettings(QDialog):
                     self.kwargTable.setItem(row, col, QTableWidgetItem(
                             str(self.current_kwargs[path][kwarg])))
                     self.kwargTable.blockSignals(False)
+                    return
         elif kwarg == 'index_col':
             try:
                 value = int(text)
