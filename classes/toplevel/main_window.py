@@ -1,9 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:40:50 2019
+"""main_window.py - Contains UI class definition."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
+
 import os
 import re
 import copy
@@ -11,15 +28,18 @@ import json
 import matplotlib.pyplot as plt
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow,
-                             QMessageBox, QFileDialog, QVBoxLayout, QAction)
+                             QMessageBox, QFileDialog, QVBoxLayout)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
 from .axes_frame import AxesFrame
-from .control_panel import ControlPanel
+#from .control_panel import ControlPanel
 from .series_display import SeriesDisplay
 from .figure_settings import FigureSettings
-from .mpl_navigation_toolbar import NavToolbar
+from .menus import FileMenu, EditMenu, ToolsMenu, ViewMenu
+from .subplot_toolbar import SubplotToolbar
+from .legend_toolbar import LegendToolbar
+from .axes_toolbar import AxesToolbar
 from ..manager.data_manager import DataManager
 from ..internal.contents_dict import ContentsDict
 
@@ -66,21 +86,25 @@ class UI(QMainWindow):
         self.default_unit = startup['default_unit']
         self.light_rcs = startup['light_rcs']
         self.dark_rcs = startup['dark_rcs']
+        self.start_mode = startup['start_mode']
+        self.highlight = startup['highlight']
+        self.af_init = startup['af_init']
+        self.filename = self.af_init['title']
 
-        self.default_qss = self.light_qss
-        self.default_rcs = self.light_rcs
-        self.current_rcs = self.default_rcs
+        if self.start_mode == 'light':
+            self.current_qss = self.light_qss
+            self.current_rcs = self.light_rcs
+            self.current_icon_path = 'rc/entypo/light'
+        elif self.start_mode == 'dark':
+            self.current_qss = self.dark_qss
+            self.current_rcs = self.dark_rcs
+            self.current_icon_path = 'rc/entypo/dark'
+        self.mode = self.start_mode
 
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('rc/satellite.png'))
         self.statusBar().showMessage('No subplot selected')
 
-        self.figure_settings = FigureSettings(self, "Figure Settings")
-        self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
-                                             Qt.LeftDockWidgetArea)
-
-
-        self.control_panel = ControlPanel(self, "Control Panel")
         self.axes_frame = AxesFrame(self)
         # this may later turn into a tab widget
         self.master_frame = QWidget()
@@ -89,102 +113,40 @@ class UI(QMainWindow):
         self.setCentralWidget(self.master_frame)
 
         self.series_display = SeriesDisplay(self, "Series Display")
+        self.figure_settings = FigureSettings(self, "Figure Settings")
+        self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
+                                             Qt.LeftDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.control_panel)
         self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
-        self.figure_settings.hide()
-        self.figure_settings.connect_widgets(container=self.axes_frame)
+        self.resizeDocks([self.series_display, self.figure_settings],
+                         [420, 165],
+                         Qt.Horizontal)
 
-        #??? Navigation Toolbar
-#        self.nt = NavToolbar(self.axes_frame, self)
-#        self.addToolBar(Qt.BottomToolBarArea, self.nt)
+        self.file_menu = FileMenu('File', self)
+        self.edit_menu = EditMenu('Edit', self)
+        self.tools_menu = ToolsMenu('Tools', self)
+        self.view_menu = ViewMenu('View', self)
+        self.menuBar().addMenu(self.file_menu)
+        self.menuBar().addMenu(self.edit_menu)
+        self.menuBar().addMenu(self.tools_menu)
+        self.menuBar().addMenu(self.view_menu)
 
-#        self.control_panel.time_filter()
-        self.filename = self.axes_frame.fig._suptitle.get_text()
-        self.resizeDocks([self.series_display], [420], Qt.Horizontal)
+        self.subplot_toolbar = SubplotToolbar('Subplot Toolbar', self)
+        self.legend_toolbar = LegendToolbar('Legend Toolbar', self)
+        self.axes_toolbar = AxesToolbar('Axes Toolbar', self)
+        self.addToolBar(self.subplot_toolbar)
+        self.addToolBar(self.legend_toolbar)
+        self.addToolBar(self.axes_toolbar)
 
-        file_menu = self.menuBar().addMenu('File')
-        new_action = QAction('New', self)
-        new_action.setShortcut('Ctrl+N')
-        new_action.setStatusTip('Open a blank figure')
-        new_action.triggered.connect(self.new)
-        file_menu.addAction(new_action)
 
-        open_action = QAction('Open', self)
-        open_action.setShortcut('Ctrl+O')
-        open_action.setStatusTip('Open existing figure')
-        open_action.triggered.connect(self.open_fig)
-        file_menu.addAction(open_action)
+#        self.figure_settings.setFixedWidth(self.figure_settings.width())
 
-        save_action = QAction('Save', self)
-        save_action.setShortcut('Ctrl+S')
-        save_action.triggered.connect(self.save)
-        file_menu.addAction(save_action)
-
-        save_as_action = QAction('Save As', self)
-        save_as_action.setShortcut('Ctrl+Shift+S')
-        save_as_action.triggered.connect(self.save_as)
-        file_menu.addAction(save_as_action)
-
-        exit_action = QAction('Exit', self)
-        exit_action.setShortcut('Ctrl+Q')
-        exit_action.setStatusTip('Exit application')
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        edit_menu = self.menuBar().addMenu('Edit')
-        undo_action = QAction('Undo', self)
-        undo_action.setShortcut('Ctrl+Z')
-        undo_action.triggered.connect(self.undo)
-        edit_menu.addAction(undo_action)
-
-        redo_action = QAction('Redo', self)
-        redo_action.setShortcut('Ctrl+Y')
-        redo_action.triggered.connect(self.redo)
-        edit_menu.addAction(redo_action)
-
-        refresh_action = QAction('Refresh Figure', self)
-        refresh_action.setShortcut('Ctrl+R')
-        refresh_action.triggered.connect(self.axes_frame.refresh_all)
-        edit_menu.addAction(refresh_action)
-
-        tools_menu = self.menuBar().addMenu('Tools')
-        data_action = QAction('Manage Data', self)
-        data_action.setShortcut('Ctrl+D')
-        data_action.triggered.connect(self.open_data_manager)
-        tools_menu.addAction(data_action)
-
-        template_action = QAction('Import Template', self)
-        template_action.setShortcut('Ctrl+T')
-        template_action.triggered.connect(self.import_template)
-        tools_menu.addAction(template_action)
-
-        view_menu = self.menuBar().addMenu('View')
-        docks_action = QAction('Show/Hide Docks', self)
-        docks_action.setShortcut('Ctrl+H')
-        docks_action.triggered.connect(self.toggle_docks)
-        view_menu.addAction(docks_action)
-
-        interactive_action = QAction('MPL Interactive Mode', self)
-        interactive_action.setShortcut('Ctrl+M')
-        interactive_action.setStatusTip('Toggle Matplotlib interactive mode')
-        interactive_action.triggered.connect(self.toggle_interactive)
-        view_menu.addAction(interactive_action)
-
-        dark_action = QAction('Dark Mode', self)
-        dark_action.setShortcut('Ctrl+B')
-        dark_action.setStatusTip('Toggle dark user interface')
-        dark_action.triggered.connect(self.toggle_dark_mode)
-        view_menu.addAction(dark_action)
+        self.figure_settings.adjust_start_end()
+        self.set_app_style(self.current_qss,
+                           self.current_rcs,
+                           self.current_icon_path)
 
         self.showMaximized()
-        ### Adding Figure Settings dock to right side currently screws this up
-        self.control_panel.setFixedHeight(self.control_panel.height())
-        self.control_panel.setFixedWidth(self.control_panel.width())
-        self.figure_settings.setFixedWidth(150)
-        self.set_app_style(self.default_qss, self.default_rcs)
-        self.control_panel.time_filter()
-
         ### Delete later, just for speed
 #        self.open_data_manager()
 
@@ -220,7 +182,7 @@ class UI(QMainWindow):
         contents = ContentsDict()
         for group in groups:
             aliases = []
-            for s in groups[group].kept():
+            for s in groups[group].series(lambda s: s.keep):
                 if s.alias:
                     aliases.append(s.alias)
                 else:
@@ -229,10 +191,9 @@ class UI(QMainWindow):
         return contents
 
     def prep_fig(self):
-        cp = self.control_panel
         af = self.axes_frame
         fs = self.figure_settings
-        cp.rename()
+        fs.rename()
         af.current_sps = []
         fs.density.setValue(100)
         af.refresh_all()
@@ -325,7 +286,7 @@ class UI(QMainWindow):
         If close event accepted,
         - hide any floating dockwidgets
         - close all created figures"""
-        self.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #???
+        self.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
 
         if not self.saved:
             result = self.popup('Figure has not been saved. Exit anyway?',
@@ -335,26 +296,66 @@ class UI(QMainWindow):
                 return
             elif result == QMessageBox.Save:
                 self.save()
-        for dock in [self.control_panel,
-                     self.series_display,
-                     self.figure_settings]:
+        for dock in [self.series_display, self.figure_settings]:
             if dock.isFloating(): dock.close()
         plt.close('all')
-        self.control_panel.title_edit.editingFinished.disconnect()
+        self.figure_settings.title_edit.editingFinished.disconnect()
         event.accept()
 
     def new(self):
         self.logger.error('too many chairs in here.')
-        print(self.control_panel.size())
         pass
 
-    def set_app_style(self, qss, mpl_rcs):
+    def set_app_style(self, qss, mpl_rcs, icon_path):
         app = QApplication.instance()
         if app is None:
             raise RuntimeError("No Qt Application found.")
+            return
         app.setStyleSheet(qss)
+
+        st = self.subplot_toolbar
+        lt = self.legend_toolbar
+        at = self.axes_toolbar
+        actions = (st.insert, st.delete, st.clear,
+                   st.cycle, st.reorder_up, st.reorder_down,
+                   lt.color_toggle, lt.legend_toggle, lt.legend_units,
+                   at.log_toggle, at.autoscale_toggle)
+        for a in actions:
+            a.setIcon(QIcon(icon_path+'/'+a.iconText()))
+#        lt.legend_units.setIcon(QIcon(icon_path+'/units'))
+
         for k,v in mpl_rcs.items(): plt.rcParams[k] = v
-        self.axes_frame.fig.set_facecolor(mpl_rcs['figure.facecolor'])
+        af = self.axes_frame
+        af.fig.set_facecolor(mpl_rcs['figure.facecolor'])
+        af.fig.set_edgecolor(mpl_rcs['figure.edgecolor'])
+        af.fig._suptitle.set_color(mpl_rcs['text.color'])
+        for sp in af.subplots:
+            for ax in sp.axes:
+                ax.set_facecolor(mpl_rcs['axes.facecolor'])
+                ax.patch.set_visible(False)
+                ax.yaxis.label.set_color(mpl_rcs['axes.labelcolor'])
+                for spine in ax.spines.values():
+                    spine.set_color(mpl_rcs['axes.edgecolor'])
+                for line in ax.get_xticklines():
+                    line.set_color(mpl_rcs['xtick.color'])
+                for line in ax.get_yticklines():
+                    line.set_color(mpl_rcs['ytick.color'])
+                for label in ax.get_xticklabels():
+                    label.set_color(mpl_rcs['xtick.color'])
+                for label in ax.get_yticklabels():
+                    label.set_color(mpl_rcs['ytick.color'])
+                for line in ax.get_xgridlines():
+                    line.set_color(mpl_rcs['grid.color'])
+                for line in ax.get_ygridlines():
+                    line.set_color(mpl_rcs['grid.color'])
+        af.replot()
+        af.draw()
+
+
+        #!!! because for some reason it resizes this qcombobox??
+        self.legend_toolbar.legend_location.setMinimumWidth(100)
+        self.axes_toolbar.selector.setMinimumWidth(100)
+        #!!! consider axes patches, and change colors of existing features
 
     def open_fig(self):
         raise Exception
@@ -405,7 +406,7 @@ class UI(QMainWindow):
     def toggle_docks(self):
         """Toggles visibility of dock widgets.
         Accessible through Telemetry Grapher's View menu (or Ctrl+H)."""
-        docks = [self.control_panel, self.series_display, self.figure_settings]
+        docks = [self.series_display, self.figure_settings]
         if any([not dock.isVisible() for dock in docks]):
             for dock in docks: dock.show()
         else:
@@ -415,17 +416,22 @@ class UI(QMainWindow):
         pass
 
     def toggle_dark_mode(self):
-        if self.current_rcs == self.light_rcs:
-            qss = self.dark_qss
+        if self.mode == 'light':
+            self.mode = 'dark'
+            self.current_qss = self.dark_qss
             self.current_rcs = self.dark_rcs
+            self.current_icon_path = 'rc/entypo/dark'
         else:
-            qss = self.light_qss
+            self.mode = 'light'
+            self.current_qss = self.light_qss
             self.current_rcs = self.light_rcs
-        self.set_app_style(qss, self.current_rcs)
+            self.current_icon_path = 'rc/entypo/light'
         default_color = self.current_rcs['axes.labelcolor']
         self.figure_settings.color_dict[None] = default_color
         self.figure_settings.color_dict[''] = default_color
-        self.axes_frame.refresh_all()
+        self.set_app_style(self.current_qss,
+                           self.current_rcs,
+                           self.current_icon_path)
 # Legacy
 #    def center(self):
 #        qr = self.frameGeometry()

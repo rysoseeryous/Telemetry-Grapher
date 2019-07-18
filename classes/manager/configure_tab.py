@@ -1,9 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:51:56 2019
+"""configure_tab.py - Contains ConfigureTab class definition."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
+
 import os
 import zipfile
 import pandas as pd
@@ -53,7 +70,7 @@ class ConfigureTab(QWidget):
         vbox.addStretch(1)
         summary_group = QGroupBox('DataFrame Summary')
         summary_group.setAlignment(Qt.AlignHCenter)
-        summary_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+#        summary_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.summary = QLabel()
         self.summary.setAlignment(Qt.AlignTop)
         summary_layout = QVBoxLayout()
@@ -84,6 +101,8 @@ class ConfigureTab(QWidget):
         vbox.addWidget(w)
 
         self.df_table = QTableView()
+        self.proxy = QSortFilterProxyModel()
+        self.df_table.setModel(self.proxy)
         w = self.df_table
         w.setEditTriggers(QAbstractItemView.NoEditTriggers)
         w.horizontalHeader().hide()
@@ -136,11 +155,12 @@ class ConfigureTab(QWidget):
 
         group = dm.groups[group_name]
         aliases = {}
-        for s in group.kept():
+        for s in group.series(lambda s: s.keep):
             alias = dm.derive_alias(s)
             aliases[s.header] = ('{} [{}]'.format(alias, s.unit))
         df = group.data.loc[:, list(aliases.keys())]
         df.rename(columns=aliases, inplace=True)
+        df.dropna(axis=0, how='all', inplace=True)
 
         try:
             if ext=='.csv':
@@ -198,10 +218,10 @@ class ConfigureTab(QWidget):
         dm = self.parent
         ui = dm.parent
         if self.hide_unused.isChecked():
-            loop = group.kept()
+            f = lambda s: s.keep
         else:
-            loop = group.series()
-        for i, s in enumerate(loop):
+            f = None
+        for i, s in enumerate(group.series(f)):
             keep_check = QCheckBox()
             keep_check.setChecked(s.keep)
             keep_check.setProperty("col", i)
@@ -248,7 +268,7 @@ class ConfigureTab(QWidget):
 
     def populate_df_table(self, group, df):
         shown_rows = 20
-        headers = [s.header for s in group.kept()]
+        headers = [s.header for s in group.series(lambda s: s.keep)]
         if len(df.index) > shown_rows:
             upper_df = df.head(shown_rows//2)
             lower_df = df.tail(shown_rows//2)
@@ -273,9 +293,7 @@ class ConfigureTab(QWidget):
         shown_df.index = new_index
 
         self.model = PandasModel(shown_df)
-        self.proxy = QSortFilterProxyModel()
         self.proxy.setSourceModel(self.model)
-        self.df_table.setModel(self.proxy)
         self.header_table.setColumnCount(len(shown_df.columns))
 
     def summarize_data(self, df):
@@ -318,10 +336,12 @@ class ConfigureTab(QWidget):
                                                        'Unit'])
             self.populate_header_table(group)
         else:
+            self.summary.setText('')
             self.header_table.clear()
             self.header_table.setRowCount(0)
             self.header_table.setColumnCount(0)
-            if hasattr(self, 'proxy'): self.proxy.deleteLater()
+            self.model = PandasModel(pd.DataFrame())
+            self.proxy.setSourceModel(self.model)
         self.header_table.cellChanged.connect(self.update_alias_scale)
 
     def update_alias_scale(self, row, col):

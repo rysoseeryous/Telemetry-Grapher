@@ -1,9 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:49:30 2019
+"""data_manager.py - Contains DataManager class definition."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
+
 import re
 from copy import copy, deepcopy
 
@@ -20,6 +37,8 @@ class DataManager(QDialog):
     """Manages the importing of data and configuration of data groups."""
 
     def __init__(self, parent):
+        self.debug = False
+
         super().__init__()
         self.parent = parent
         self.setWindowTitle('Data Manager')
@@ -58,6 +77,9 @@ class DataManager(QDialog):
         self.setLayout(vbox)
 
         self.groups_tab.search_dir()
+        if self.debug:
+            self.groups_tab.import_group() #!!! Delete Later
+            self.save_changes()
 
     def keyPressEvent(self, event):
         """Close dialog from escape key."""
@@ -95,20 +117,10 @@ class DataManager(QDialog):
         """Saves groups created in Data Manager dialog to main window.
         Maps existing data to new data."""
 
-        def get_header(alias):
-                try:
-                    # get original header of each alias in sp.contents
-                    return ui.groups[sp_name].alias_dict[alias]
-                except KeyError:
-                    # if original header being used as alias
-                    # (because no alias was assigned)
-                    return alias
-
-
         if not self.modified: return
         ui = self.parent
         sd = ui.series_display
-        cp = ui.control_panel
+        fs = ui.figure_settings
         af = ui.axes_frame
 
         # Get new group: alias information from self.groups
@@ -124,9 +136,10 @@ class DataManager(QDialog):
                     # Try to map old aliases to new
                     sp_aliases = sp.contents[dm_name]
                     dm_aliases = dm_contents[dm_name]
-                    headers = [get_header(alias) for alias in copy(sp_aliases)]
+                    f = ui.groups[sp_name].get_header
+                    headers = [f(alias) for alias in copy(sp_aliases)]
                     sp_aliases.clear()
-                    for s in self.groups[dm_name].kept():
+                    for s in self.groups[dm_name].series(lambda s: s.keep):
                         if s.header in headers:
                             new_alias = self.derive_alias(s)
                             sp_aliases.append(new_alias)
@@ -134,10 +147,10 @@ class DataManager(QDialog):
                         if not dm_aliases: del dm_aliases
                 except KeyError:
                     del sp.contents[sp_name]
-            sp.plot(skeleton=True)
+#            sp.plot(skeleton=True)
 
         ui.groups = self.groups
-        cp.time_filter()  # calls af.refresh_all()
+        fs.adjust_start_end()  # calls af.refresh_all()
         #reset group_reassign
         self.group_reassign = {name:[name] for name in self.groups}
         # Dump everything else into af.available_data

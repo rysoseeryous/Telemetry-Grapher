@@ -1,9 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:53:50 2019
+"""__main__.py - Executes GUI."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
 
 #if __name__ == '__main__':
 import sys
@@ -11,7 +27,7 @@ import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QCoreApplication
 # If you want to run from Anaconda Prompt, this should be .classes.ab
-# But doing that executes without error but doesn't actually open the app
+# Doing that executes without error but doesn't actually open the app
 # *shrug*
 from classes.toplevel.main_window import UI
 
@@ -21,6 +37,7 @@ logging.basicConfig(filename='errors.log', filemode='w', level=logging.DEBUG)
 
 def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
     """Handler for unhandled exceptions that will write to the logs"""
+    print('Error thrown! Check the log.')
     if issubclass(exc_type, KeyboardInterrupt):
         # call the default excepthook saved at __excepthook__
         sys.__excepthook__(exc_type, exc_value, exc_traceback)

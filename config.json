@@ -86,7 +86,6 @@
   "default_type": "",
   "default_unit": "",
   "light_rcs": {
-    "font.family": "serif",
     "patch.edgecolor": "k",
     "text.color": "k",
     "axes.facecolor": "w",
@@ -98,10 +97,10 @@
     "figure.facecolor": "w",
     "figure.edgecolor": "w",
     "savefig.facecolor": "w",
-    "savefig.edgecolor": "w"
+    "savefig.edgecolor": "w",
+    "font.family": "serif"
   },
   "dark_rcs": {
-    "font.family": "serif",
     "patch.edgecolor": "#EFF0F1",
     "text.color": "#EFF0F1",
     "axes.facecolor": "#31363b",
@@ -113,6 +112,20 @@
     "figure.facecolor": "#31363b",
     "figure.edgecolor": "#31363b",
     "savefig.facecolor": "#31363b",
-    "savefig.edgecolor": "#31363b"
+    "savefig.edgecolor": "#31363b",
+    "font.family": "serif"
+  },
+  "start_mode": "light",
+  "highlight": {
+    "True": 1.5,
+    "False": 0.5
+  },
+  "af_init": {
+    "upper_pad": 0.07,
+    "lower_pad": 0.08,
+    "left_pad": 0.05,
+    "right_pad": 0.05,
+    "title_size": 30,
+    "title": "New_Figure"
   }
 }

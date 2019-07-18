@@ -1,10 +1,28 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:47:40 2019
+"""series_display.py - Contains SeriesDisplay class definition."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
+
 import re
+from copy import copy
 
 from PyQt5.QtWidgets import (QDockWidget, QGridLayout, QPushButton, QLineEdit,
                              QWidget, QTreeWidget, QTreeWidgetItem)
@@ -46,14 +64,14 @@ class SeriesDisplay(QDockWidget):
 
         grid.addWidget(self.search_available, 0, 0)
         grid.addWidget(self.search_plotted, 0, 1)
-        grid.addWidget(self.available, 1, 0)
-        grid.addWidget(self.plotted, 1, 1)
-        grid.addWidget(self.add, 2, 0)
-        grid.addWidget(self.remove, 2, 1)
+        grid.addWidget(self.add, 1, 0)
+        grid.addWidget(self.remove, 1, 1)
+        grid.addWidget(self.available, 2, 0)
+        grid.addWidget(self.plotted, 2, 1)
         w.setLayout(grid)
         self.setWidget(w)
 
-        self.populate_tree(parent.axes_frame.available_data, self.available)
+        self.populate_tree('available', parent.axes_frame.available_data)
         self.available.expandAll()
         self.available.resizeColumnToContents(0)
 
@@ -70,8 +88,14 @@ class SeriesDisplay(QDockWidget):
             for x in to_delete:
                 tree.takeTopLevelItem(x)
 
-    def populate_tree(self, contents, target_tree):
+    def populate_tree(self, which, contents):
         """Clears target_tree and repopulates with contents"""
+        if which == 'available':
+            target_tree = self.available
+            w = self.search_available
+        elif which == 'plotted':
+            target_tree = self.plotted
+            w = self.search_plotted
         target_tree.clear()
         if contents:
             for group in contents:
@@ -83,21 +107,22 @@ class SeriesDisplay(QDockWidget):
                     level0.addChild(level1)
                 level0.setExpanded(True)
             target_tree.resizeColumnToContents(0)
+#            w.textChanged.emit(w.text())
             self.cleanup()
 
     def transfer(self):
         """Swaps series or group references between available and plotted."""
         ui = self.parent
         af = ui.axes_frame
-        selected_sps = af.current_sps
-        if not selected_sps:
+        sps = af.current_sps
+        if not sps:
             ui.statusBar().showMessage(
                     'Select a subplot to add or remove series')
-        elif len(selected_sps) > 1:
+        elif len(sps) > 1:
             ui.statusBar().showMessage(
                     'Series can only be added to one subplot')
         else:
-            sp = selected_sps[0]
+            sp = sps[0]
             caller = QObject.sender(self)
             if caller == self.add:
                 selected = self.available.selectedItems()
@@ -126,23 +151,19 @@ class SeriesDisplay(QDockWidget):
                     contents.add({group: aliases})
 
                 if caller == self.add:
-                    sp.contents.add(contents)
+                    sp.add(contents)
                     af.available_data.remove(contents)
                 elif caller == self.remove:
-                    sp.contents.remove(contents)
+                    sp.remove(contents)
                     af.available_data.add(contents)
-                # Refresh sp
-                sp.plot(skeleton=True)
-                af.refresh_all()
-                # Populate both trees with un-search-filtered data
-                self.populate_tree(af.available_data, self.available)
-                self.populate_tree(sp.contents, self.plotted)
-                self.cleanup()
-                # Reapply search filters
-                w = self.search_available
-                w.textChanged.emit(w.text())
-                w = self.search_plotted
-                w.textChanged.emit(w.text())
+                sp.plot()
+                sp.show_legend()
+                af.select_subplot(None, force_select=[sp])
+                af.update_gridspec()
+                af.draw()
+                # Populate both trees and reapply search filter
+                self.populate_tree('available', af.available_data)
+                self.populate_tree('plotted', sp.contents)
             else:
                 ui.statusBar().showMessage('No series selected')
 
@@ -161,17 +182,23 @@ class SeriesDisplay(QDockWidget):
         (case insensitive)"""
         search_bar = QObject.sender(self)
         if search_bar == self.search_available:
-            tree = self.available
+            which = 'available'
             data_set = self.parent.axes_frame.available_data
         elif search_bar == self.search_plotted:
-            tree = self.plotted
+            which = 'plotted'
             data_set = self.get_sp_contents()
         # There's probably a more efficient way to do this. More pythonic.
         user_input = re.compile(text, re.IGNORECASE)
         matches = ContentsDict()
         if data_set:
-            for group, headers in data_set.items():
-                for alias in headers:
-                    if user_input.search(alias):
-                        matches.add({group: [alias]})
-            self.populate_tree(matches, tree)
+            for group, aliases in data_set.items():
+                matches.add({group:
+                    [a for a in aliases if user_input.search(a)]})
+#                #  add an input method to group.series(which)
+#                #  for which=function
+#                #  ie lambda x: x.keep
+#                #  or lambda x: user_input.search(x)
+#                for alias in aliases:
+#                    if user_input.search(alias):
+#                        matches.add({group: [alias]})
+            self.populate_tree(which, matches)

@@ -1,9 +1,26 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 13 15:49:53 2019
+"""groups_tab.py - Contains GroupsTab class definition."""
 
-@author: seery
-"""
+# This file is part of Telemetry-Grapher.
+
+# Telemetry-Grapher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Telemetry-Grapher is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY
+# without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Telemetry-Grapher. If not, see < https: // www.gnu.org/licenses/>.
+
+__author__ = "Ryan Seery"
+__copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
+__license__ = "GNU General Public License"
+
 import os
 import re
 import datetime as dt
@@ -11,8 +28,9 @@ import pandas as pd
 import numpy as np
 
 from PyQt5.QtWidgets import (QWidget, QFileDialog, QInputDialog,
-                             QGridLayout, QHBoxLayout, QVBoxLayout, QStyle,
+                             QGridLayout, QHBoxLayout, QVBoxLayout,
                              QPushButton, QLabel, QLineEdit, QListWidget)
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QObject
 
 from .import_settings import ImportSettings
@@ -25,7 +43,6 @@ class GroupsTab(QWidget):
         super().__init__()
         self.parent = parent
         dm = self.parent
-#        self.importsettings = QWidget()
 
         self.path_dict = {}
         self.df_preview = {}
@@ -34,8 +51,7 @@ class GroupsTab(QWidget):
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
         self.browse = QPushButton()
-        icon = getattr(QStyle, 'SP_DialogOpenButton')
-        self.browse.setIcon(self.style().standardIcon(icon))
+        self.browse.setIcon(QIcon(dm.parent.current_icon_path+'/browse'))
         self.browse.clicked.connect(self.browse_dialog)
         hbox.addWidget(self.browse)
         self.directory = QLineEdit(self.dir)
@@ -51,7 +67,9 @@ class GroupsTab(QWidget):
         self.file_search.setFocus(True)
         grid.addWidget(self.file_search, 0, 0)
 
-        self.group_name = QLineEdit('Test')  # delete initial text later #!!!
+        self.group_name = QLineEdit()
+        if self.parent.debug:
+            self.group_name.setText('Debug')  # delete initial text later #!!!
         self.group_name.setPlaceholderText('Group Name')
         self.group_name.returnPressed.connect(self.import_group)
         grid.addWidget(self.group_name, 0, 1)
@@ -73,6 +91,8 @@ class GroupsTab(QWidget):
 
         self.group_files = QListWidget()
         self.group_files.setSelectionMode(QListWidget.ExtendedSelection)
+        if self.parent.debug:
+            self.group_files.addItem('Test.csv') #!!! Delete later
         grid.addWidget(self.group_files, 2, 1)
 
         self.imported_groups = QListWidget()
@@ -308,7 +328,9 @@ class GroupsTab(QWidget):
         dm.message_log.repaint()
         df = df.applymap(self.floatify)
         dm.feedback('Done', mode='append')
-        return df.sort_index()
+        df.drop_duplicates(inplace=True)
+        df.sort_index(inplace=True)
+        return df
 
     def import_group(self):
         dm = self.parent
