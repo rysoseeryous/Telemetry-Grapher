@@ -45,12 +45,12 @@ def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
     logger.critical("Unhandled exception",
                     exc_info=(exc_type, exc_value, exc_traceback))
 
-sys.excepthook = handle_unhandled_exception
+#sys.excepthook = handle_unhandled_exception
 
 
 if 'app' not in locals():
     app = QCoreApplication.instance()
 if app is None:  # otherwise kernel dies
     app = QApplication(sys.argv)
-_ = UI(logger=logger)#, groups={'test': test_group})
+_ = UI(logger=logger)
 app.exec_()

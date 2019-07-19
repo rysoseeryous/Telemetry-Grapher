@@ -25,8 +25,7 @@ import itertools
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
 
-from PyQt5.QtWidgets import QToolBar, QAction, QStyle
-from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtCore import QObject
 
 from ..internal.subplot_manager import SubplotManager
@@ -71,71 +70,71 @@ class SubplotToolbar(QToolBar):
     def insert_subplot(self):
         """Inserts blank subplot below selected subplot."""
         ui = self.parent
-        af = ui.axes_frame
+        cf = ui.get_current_figure()
         fs = ui.figure_settings
-        if len(af.current_sps) == 1:
-            idx = af.current_sps[0].index
+        if len(cf.current_sps) == 1:
+            idx = cf.current_sps[0].index
         else:
-            idx = af.nplots()-1
-        weights = af.weights()
+            idx = cf.nplots()-1
+        weights = cf.weights()
         weights.insert(idx+1, 1)
-        nplots = af.nplots() + 1
-        ax = af.fig.add_subplot(111)
-        af.subplots.insert(idx+1, SubplotManager(ui, ax, index=idx+1))
+        nplots = cf.nplots() + 1
+        ax = cf.fig.add_subplot(111)
+        cf.subplots.insert(idx+1, SubplotManager(ui, ax, index=idx+1))
         fs.weights_edit.setText(str(weights))
-        af.update_gridspec(nplots, weights)
-        af.format_axes()
-        af.draw()
+        cf.update_gridspec(nplots, weights)
+        cf.format_axes()
+        cf.draw()
 
     def delete_subplot(self):
         """Deletes selected subplot(s) and returns contents to available."""
         ui = self.parent
-        af = ui.axes_frame
+        cf = ui.get_current_figure()
         fs = ui.figure_settings
         sd = ui.series_display
-        nplots = af.nplots()
-        weights = af.weights()
-        for i in reversed([sp.index for sp in af.current_sps]):
+        nplots = cf.nplots()
+        weights = cf.weights()
+        for i in reversed([sp.index for sp in cf.current_sps]):
             # add contents back into available tree
-            sp = af.subplots[i]
-            af.available_data.add(deepcopy(sp.contents))
+            sp = cf.subplots[i]
+            cf.available_data.add(deepcopy(sp.contents))
             if nplots == 1:
                 sp.remove(deepcopy(sp.contents))
                 weights = [1]
             else:
                 for ax in sp.axes: ax.remove()
-                del af.subplots[i]
+                del cf.subplots[i]
                 del weights[i]
                 nplots -= 1
-        sd.populate_tree('available', af.available_data)
-        af.select_subplot(None, force_select=[])
+        sd.populate_tree('available', cf.available_data)
+        cf.select_subplot(None, force_select=[])
         fs.weights_edit.setText(str(weights))
-        af.update_gridspec(nplots, weights)
-        af.format_axes()
-        af.draw()
+        cf.update_gridspec(nplots, weights)
+        cf.format_axes()
+        cf.draw()
 
     def clear_subplot(self):
         """Clears selected subplots.
         Adds selected subplots' contents back into available tree."""
         ui = self.parent
-        af = ui.axes_frame
+        cf = ui.get_current_figure()
         sd = ui.series_display
-        for sp in af.current_sps:
-            af.available_data.add(deepcopy(sp.contents))
+        for sp in cf.current_sps:
+            cf.available_data.add(deepcopy(sp.contents))
             sp.remove(deepcopy(sp.contents))
-        sd.populate_tree('available', af.available_data)
-        af.select_subplot(None, force_select=copy(af.current_sps))
-        af.update_gridspec()
-        af.format_axes()
-        af.draw()
+        sd.populate_tree('available', cf.available_data)
+        cf.select_subplot(None, force_select=copy(cf.current_sps))
+        cf.update_gridspec()
+        cf.format_axes()
+        cf.draw()
 
     def cycle_subplot(self):
         """Cycles through unit order permutations of selected subplot(s)."""
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             plt.setp(sp.host().spines.values(),
-                     linewidth=ui.highlight['False'])
+                     linewidth=ui.highlight[False])
             ids = [ax._id for ax in sp.axes]
             sorted_perms = sorted(itertools.permutations(ids))
             perms = [list(p) for p in sorted_perms]
@@ -143,31 +142,31 @@ class SubplotToolbar(QToolBar):
             new_ids = perms[(i+1)%len(perms)]
             sp.axes = [sp.get_axes(*_id) for _id in new_ids]
             plt.setp(sp.host().spines.values(),
-                     linewidth=ui.highlight['True'])
-        af.replot()
-        af.format_axes()
-        af.draw()
+                     linewidth=ui.highlight[True])
+        cf.replot()
+        cf.format_axes()
+        cf.draw()
 
     def reorder(self):
         """Reorders selected subplot up or down."""
         ui = self.parent
-        af = ui.axes_frame
+        cf = ui.get_current_figure()
         fs = ui.figure_settings
-        sp = af.current_sps[0]
+        sp = cf.current_sps[0]
         i = sp.index
         caller = QObject.sender(self)
         if caller == self.reorder_up:
             j = i-1
         if caller == self.reorder_down:
             j = i+1
-        nplots = af.nplots()
+        nplots = cf.nplots()
         # if can be moved up/down
         if 0 <= j < nplots:
-            weights = af.weights()
+            weights = cf.weights()
             weights.insert(j, weights.pop(i))
-            af.subplots.insert(j, af.subplots.pop(i))
-            af.select_subplot(None, force_select=[af.subplots[j]])
+            cf.subplots.insert(j, cf.subplots.pop(i))
+            cf.select_subplot(None, force_select=[cf.subplots[j]])
             fs.weights_edit.setText(str(weights))
-            af.update_gridspec(nplots, weights)
-            af.format_axes()
-            af.draw()
+            cf.update_gridspec(nplots, weights)
+            cf.format_axes()
+            cf.draw()

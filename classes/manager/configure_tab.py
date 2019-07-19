@@ -42,11 +42,12 @@ class ConfigureTab(QWidget):
         self.parent = parent
         dm = self.parent
         ui = dm.parent
+        cf = ui.get_current_figure()
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
 
         self.select_group = QComboBox()
-        self.select_group.addItems(ui.groups.keys())
+        self.select_group.addItems(cf.groups.keys())
         self.select_group.currentIndexChanged.connect(self.display_header_info)
         vbox.addWidget(self.select_group)
 

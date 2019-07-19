@@ -115,17 +115,30 @@
     "savefig.edgecolor": "#31363b",
     "font.family": "serif"
   },
-  "start_mode": "light",
+  "start_mode": "dark",
   "highlight": {
     "True": 1.5,
     "False": 0.5
   },
   "af_init": {
+    "tsf": "%b %d, %H:%M",
+    "title": "New_Figure",
     "upper_pad": 0.07,
     "lower_pad": 0.08,
     "left_pad": 0.05,
     "right_pad": 0.05,
+    "spacing": 0.05,
+    "axis_offset": 0.05,
+    "MX": false,
+    "mx": false,
+    "MY": false,
+    "my": false,
+    "scatter": true,
+    "dot_size": 0.50,
+    "density": 100,
     "title_size": 30,
-    "title": "New_Figure"
+    "label_size": 12,
+    "tick_size": 10,
+    "tick_rot": 45
   }
 }

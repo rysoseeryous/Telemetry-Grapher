@@ -21,6 +21,7 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import datetime as dt
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
@@ -28,9 +29,10 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigCanvas
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDateTime
 
 from ..internal.subplot_manager import SubplotManager
+from ..internal.contents_dict import ContentsDict
 
 class AxesFrame(FigCanvas):
     """Central widget in Application Base main window."""
@@ -44,29 +46,39 @@ class AxesFrame(FigCanvas):
     def _draw(self, event):
         self.draw()
 
-    def __init__(self, parent):
+    def __init__(self, parent, fig_params):
         self.fig = plt.figure()
         self.patch_figure(self.fig)
         super().__init__(self.fig)
         self.saved = True
         self.first_save = True
         self.parent = parent
-        ui = self.parent
-        self.timestamp_format = '%b %d, %H:%M'
-        left = ui.af_init['left_pad']
-        right = 1 - ui.af_init['right_pad']
-        bottom = ui.af_init['lower_pad']
-        top = 1 - ui.af_init['upper_pad']
+        self.fig_params = fig_params
+
         self.gs = GridSpec(1, 1,
-                           left=left, right=right, bottom=bottom, top=top,
+                           left=self.fig_params.left_pad,
+                           right=1-self.fig_params.right_pad,
+                           bottom=self.fig_params.lower_pad,
+                           top=1-self.fig_params.upper_pad,
+                           hspace=self.fig_params.spacing,
                            height_ratios=[1])
         ax0 = self.fig.add_subplot(self.gs[0])
         self.subplots = [SubplotManager(parent, ax0, index=0)]
         self.current_sps = []
-        self.available_data = ui.groups_to_contents(ui.groups)
+        self.groups = {}
+        self.available_data = ContentsDict()
+        #ui.groups_to_contents(self.groups)
+
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
         self.fig.canvas.mpl_connect('button_press_event', self._draw)
-        self.fig.suptitle(ui.af_init['title'], fontsize=ui.af_init['title_size'])
+        self.fig.suptitle(self.fig_params.title,
+                          fontsize=self.fig_params.title_size)
+
+        self.start = dt.datetime.strptime('2000-01-01 00:00:00',
+                                              '%Y-%m-%d  %H:%M:%S')
+        self.end = dt.datetime.now()
+        self.major_locator = mdates.DayLocator()
+        self.minor_locator = mdates.HourLocator(interval=12)
         self.draw()
 
     def weights(self):
@@ -76,8 +88,6 @@ class AxesFrame(FigCanvas):
         return self.gs.get_geometry()[0]
 
     def update_gridspec(self, nplots=None, weights=None):
-        ui = self.parent
-        fs = ui.figure_settings
         if nplots is None:
             nplots = self.nplots()
         if weights is None:
@@ -91,13 +101,13 @@ class AxesFrame(FigCanvas):
             if c1 and c2 and c3:
                 n += 1
                 break
-        left = fs.left_pad.value()
-        right = 1 - fs.right_pad.value() - fs.axis_offset.value()*n
-        bottom = fs.lower_pad.value()
-        top = 1 - fs.upper_pad.value()
+        left = self.fig_params.left_pad
+        right = 1 - self.fig_params.right_pad - self.fig_params.axis_offset*n
+        bottom = self.fig_params.lower_pad
+        top = 1 - self.fig_params.upper_pad
         self.gs = GridSpec(nplots, 1, height_ratios=weights,
                            left=left, right=right, bottom=bottom, top=top,
-                           hspace=fs.spacing.value())
+                           hspace=self.fig_params.spacing)
         for i, sp in enumerate(self.subplots):
             sp.index = i
             for ax in sp.axes:
@@ -114,27 +124,26 @@ class AxesFrame(FigCanvas):
 
     def format_axes(self):
         """Manages figure axes ticks, tick labels."""
-        ui = self.parent
-        fs = ui.figure_settings
         linestyles = ['-', '--', ':', '-.']
 
-        self.fig._suptitle.set_fontsize(fs.title_size.value())
+        self.fig._suptitle.set_fontsize(self.fig_params.title_size)
 
         for sp in self.subplots:
             for i, ax in enumerate(sp.axes):
                 ax.tick_params(axis='x', which='both',
                                labelbottom=False, bottom=False)
-                ax.yaxis.label.set_size(fs.label_size.value())
-                ax.tick_params(axis='y', labelsize=fs.tick_size.value())
+                ax.yaxis.label.set_size(self.fig_params.label_size)
+                ax.tick_params(axis='y', labelsize=self.fig_params.tick_size)
 
                 ax.minorticks_off()
-                if fs.major_y.isChecked():
+                if self.fig_params.MY:
                     ax.yaxis.grid(which='major',
                                   linestyle=linestyles[i%len(linestyles)])
                 else:
                     ax.yaxis.grid(which='major', b=False)
-                if fs.minor_y.isChecked():
-                    ax.yaxis.set_minor_locator(AutoMinorLocator())
+                if self.fig_params.my:
+                    if not ax.log:
+                        ax.yaxis.set_minor_locator(AutoMinorLocator())
                     ax.yaxis.grid(which='minor',
                                   linestyle=linestyles[i%len(linestyles)])
                 else:
@@ -144,19 +153,19 @@ class AxesFrame(FigCanvas):
                     sp.host().tick_params(axis='x', which='both',
                            labelbottom=True, bottom=True)
                     for tick in sp.host().xaxis.get_ticklabels():
-                        tick.set_size(fs.tick_size.value())
-                        tick.set_rotation(fs.tick_rot.value())
+                        tick.set_size(self.fig_params.tick_size)
+                        tick.set_rotation(self.fig_params.tick_rot)
                         tick.set_horizontalalignment('right')
                 sp.host().xaxis_date()
                 sp.host().xaxis.set_major_locator(self.major_locator)
-                if fs.minor_x.isChecked():
+                if self.fig_params.mx:
                     sp.host().xaxis.set_minor_locator(self.minor_locator)
                 else:
                     sp.host().xaxis.grid(which='minor', b=False)
                 sp.host().xaxis.set_major_formatter(
-                        mdates.DateFormatter(self.timestamp_format))
-            sp.host().xaxis.grid(which='major', b=fs.major_x.isChecked())
-            sp.host().xaxis.grid(which='minor', b=fs.minor_x.isChecked())
+                        mdates.DateFormatter(self.fig_params.tsf))
+            sp.host().xaxis.grid(which='major', b=self.fig_params.MX)
+            sp.host().xaxis.grid(which='minor', b=self.fig_params.mx)
             self.saved = False
 
     def get_subplot(self, event):
@@ -182,7 +191,7 @@ class AxesFrame(FigCanvas):
             if sps:
                 for sp in sps.copy():
                     plt.setp(sp.host().spines.values(),
-                             linewidth=ui.highlight[str(add)])
+                             linewidth=ui.highlight[add])
                     if add:
                         self.current_sps.append(sp)
                     else:
@@ -246,7 +255,7 @@ class AxesFrame(FigCanvas):
         lt.legend_location.blockSignals(True)
         lt.legend_location.clear()
         if b:
-            lt.legend_location.addItems(list(lt.locations.keys()))
+            lt.legend_location.addItems(list(ui.locations.keys()))
             lt.legend_location.setCurrentText(self.current_sps[0].location)
         lt.legend_location.blockSignals(False)
 

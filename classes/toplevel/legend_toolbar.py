@@ -21,26 +21,13 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-from PyQt5.QtWidgets import (QToolBar, QComboBox, QAction, QToolButton,
-                             QSpinBox)
+from PyQt5.QtWidgets import (QToolBar, QComboBox, QAction, QSpinBox)
 
 class LegendToolbar(QToolBar):
 
     def __init__(self, title, parent):
         super().__init__(title)
         self.parent = parent
-        self.locations = {
-            'Outside Right': 'center left',
-            'Outside Top': 'lower center',
-            'Upper Left': 'upper left',
-            'Upper Center': 'upper center',
-            'Upper Right': 'upper right',
-            'Center Left': 'center left',
-            'Center Right': 'center right',
-            'Lower Left': 'lower left',
-            'Lower Center': 'lower center',
-            'Lower Right': 'lower right',
-            }
 
         self.color_toggle = QAction('cc', self)
         self.color_toggle.setToolTip('Color Coordinate')
@@ -91,44 +78,44 @@ class LegendToolbar(QToolBar):
     def toggle_legend(self, checked):
         """Toggles legend display of selected subplot(s)."""
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             sp.legend_on = checked
-        af.replot(data=False)
-        af.update_gridspec()
-        af.draw()
+        cf.replot(data=False)
+        cf.update_gridspec()
+        cf.draw()
 
     def set_legend_location(self, text):
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             sp.location = text
-        af.replot(data=False)
-        af.update_gridspec()
-        af.draw()
+        cf.replot(data=False)
+        cf.update_gridspec()
+        cf.draw()
 
     def set_legend_columns(self, value):
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             sp.ncols = value
-        af.replot(data=False)
-        af.draw()
+        cf.replot(data=False)
+        cf.draw()
 
     def toggle_legend_units(self, checked):
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             sp.legend_units = checked
-        af.replot(data=False)
-        af.draw()
+        cf.replot(data=False)
+        cf.draw()
 
     def color_coordinate(self, checked):
         """Coordinates colors of selected subplot(s) by unit type (not unit).
         Each unit type gets its own color for lines, labels, and ticks."""
         ui = self.parent
-        af = ui.axes_frame
-        for sp in af.current_sps:
+        cf = ui.get_current_figure()
+        for sp in cf.current_sps:
             sp.color_coord = checked
-        af.replot()
-        af.draw()
+        cf.replot()
+        cf.draw()

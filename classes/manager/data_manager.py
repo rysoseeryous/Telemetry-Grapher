@@ -41,15 +41,22 @@ class DataManager(QDialog):
 
         super().__init__()
         self.parent = parent
+        cf = self.parent.get_current_figure()
         self.setWindowTitle('Data Manager')
         self.setWindowIcon(QIcon('rc/satellite.png'))
-        self.groups = deepcopy(parent.groups)
+        self.groups = deepcopy(cf.groups)
         self.group_reassign = {name:[name] for name in self.groups}
         self.modified = False
         self.resize(1000, 500)
         splitter = QSplitter(Qt.Vertical)
 
         self.tab_base = QTabWidget()
+        self.tab_base.setStyleSheet("""
+                                    QTabWidget::pane
+                                    {
+                                        top: -0.5ex;
+                                        bottom: 0ex;
+                                    }""")
         self.groups_tab = GroupsTab(self)
         self.configure_tab = ConfigureTab(self)
         self.tab_base.addTab(self.groups_tab, 'File Grouping')
@@ -121,12 +128,12 @@ class DataManager(QDialog):
         ui = self.parent
         sd = ui.series_display
         fs = ui.figure_settings
-        af = ui.axes_frame
+        cf = ui.get_current_figure()
 
         # Get new group: alias information from self.groups
         dm_contents = ui.groups_to_contents(self.groups)
         # Rename/delete groups in subplots first
-        for sp in af.subplots:
+        for sp in cf.subplots:
             for sp_name in copy(tuple(sp.contents.keys())):
                 try:
                     dm_name = self.group_reassign[sp_name][-1]
@@ -136,7 +143,7 @@ class DataManager(QDialog):
                     # Try to map old aliases to new
                     sp_aliases = sp.contents[dm_name]
                     dm_aliases = dm_contents[dm_name]
-                    f = ui.groups[sp_name].get_header
+                    f = cf.groups[sp_name].get_header
                     headers = [f(alias) for alias in copy(sp_aliases)]
                     sp_aliases.clear()
                     for s in self.groups[dm_name].series(lambda s: s.keep):
@@ -148,22 +155,21 @@ class DataManager(QDialog):
                 except KeyError:
                     del sp.contents[sp_name]
 
-        ui.groups = self.groups
-        fs.adjust_start_end()  # calls af.refresh_all()
+        cf.groups = self.groups
+        fs.cap_start_end()
         #reset group_reassign
         self.group_reassign = {name:[name] for name in self.groups}
-        # Dump everything else into af.available_data
-        af.available_data = dm_contents
-        sd.available.clear()
-        sd.search_available.textChanged.emit(sd.search_available.text())
+        # Dump everything else into cf.available_data
+        cf.available_data = dm_contents
+        sd.populate_tree('available', cf.available_data)
 
-        if len(af.current_sps) == 1:
-            sp = af.current_sps[0]
-            sd.plotted.clear()
-            sd.search_plotted.textChanged.emit(sd.search_plotted.text())
+        sd.plotted.clear()
+        if len(cf.current_sps) == 1:
+            sp = cf.current_sps[0]
+            sd.populate_tree('plotted', sp.contents)
         self.feedback('Saved data to main window.')
         self.modified = False
-        af.saved = False
+        cf.saved = False
 
     def closeEvent(self, event):
         """Asks user to save changes before exiting."""

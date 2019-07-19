@@ -23,12 +23,11 @@ __license__ = "GNU General Public License"
 
 import os
 import re
-import copy
 import json
 import matplotlib.pyplot as plt
 
-from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow,
-                             QMessageBox, QFileDialog, QVBoxLayout)
+from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow, QTabWidget,
+                             QMessageBox, QFileDialog, QTabBar)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
@@ -41,13 +40,14 @@ from .legend_toolbar import LegendToolbar
 from .axes_toolbar import AxesToolbar
 from ..manager.data_manager import DataManager
 from ..internal.contents_dict import ContentsDict
+from ..internal.bunch import Bunch
+from ..internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
     """Main application window."""
 
-    def __init__(self, logger, groups={}):
+    def __init__(self, logger):
         super().__init__()
-        self.groups = copy.deepcopy(groups)
         self.fig_dir = os.getcwd()
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
@@ -83,41 +83,73 @@ class UI(QMainWindow):
         self.default_unit = startup['default_unit']
         self.light_rcs = startup['light_rcs']
         self.dark_rcs = startup['dark_rcs']
-        self.start_mode = startup['start_mode']
-        self.highlight = startup['highlight']
+        self.mode = startup['start_mode']
+        obj = startup['highlight']
+        self.highlight = {True: obj['True'], False: obj['False']}
         self.af_init = startup['af_init']
-        self.filename = self.af_init['title']
 
-        if self.start_mode == 'light':
+        if self.mode == 'light':
             self.current_qss = self.light_qss
             self.current_rcs = self.light_rcs
             self.current_icon_path = 'rc/entypo/light'
-        elif self.start_mode == 'dark':
+        elif self.mode == 'dark':
             self.current_qss = self.dark_qss
             self.current_rcs = self.dark_rcs
             self.current_icon_path = 'rc/entypo/dark'
-        self.mode = self.start_mode
+
+        # For displaying subplot legends
+        self.locations = {
+            'Outside Right': 'center left',
+            'Outside Top': 'lower center',
+            'Upper Left': 'upper left',
+            'Upper Center': 'upper center',
+            'Upper Right': 'upper right',
+            'Center Left': 'center left',
+            'Center Right': 'center right',
+            'Lower Left': 'lower left',
+            'Lower Center': 'lower center',
+            'Lower Right': 'lower right',
+            }
 
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('rc/satellite.png'))
         self.statusBar().showMessage('No subplot selected')
 
-        self.axes_frame = AxesFrame(self)
-        # this may later turn into a tab widget
-        self.master_frame = QWidget()
-        self.master_frame.setLayout(QVBoxLayout())
-        self.master_frame.layout().addWidget(self.axes_frame)
-        self.setCentralWidget(self.master_frame)
+        self.tab_base = QTabWidget()
+        self.tab_bar = EditableTabBar(self)
+        self.tab_base.setTabBar(self.tab_bar)
+        cf = AxesFrame(self, Bunch(self.af_init))
+        self.tab_base.addTab(cf, cf.fig_params.title)
+        self.tab_base.addTab(QWidget(), '+')
+        self.tab_base.tabBar().setStyleSheet("""
+                            QTabBar::tab:last
+                            {
+                                width: 6ex;
+                                min-width: 6ex;
+                                height: 6ex;
+                            }
+                            """)
+        self.tab_base.setTabsClosable(True)
+        self.tab_base.tabCloseRequested.connect(self.close_tab)
+        self.tab_base.tabBar().tabButton(1, QTabBar.RightSide).resize(0,0)
+        self.tab_base.tabBar().setSelectionBehaviorOnRemove(
+                QTabBar.SelectPreviousTab)
+        self.tab_base.setTabPosition(QTabWidget.South)
+        self.tab_base.setStyleSheet("""
+                            QTabWidget::tab-bar
+                            {
+                                alignment: left;
+                            }
+                            """)
+        self.setCentralWidget(self.tab_base)
 
         self.series_display = SeriesDisplay(self, "Series Display")
         self.figure_settings = FigureSettings(self, "Figure Settings")
         self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
                                              Qt.LeftDockWidgetArea)
+
         self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
         self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
-        self.resizeDocks([self.series_display, self.figure_settings],
-                         [420, 165],
-                         Qt.Horizontal)
 
         self.file_menu = FileMenu('File', self)
         self.edit_menu = EditMenu('Edit', self)
@@ -135,22 +167,69 @@ class UI(QMainWindow):
         self.addToolBar(self.legend_toolbar)
         self.addToolBar(self.axes_toolbar)
 
-#        self.figure_settings.setFixedWidth(self.figure_settings.width())
-
-        self.figure_settings.adjust_start_end()
+        self.figure_settings.update_fields(cf)
         self.set_app_style(self.current_qss,
                            self.current_rcs,
                            self.current_icon_path)
-
-        self.axes_frame.saved = True
-
+        cf.saved = True
+        self.tab_base.currentChanged.connect(self.update_dock_widgets)
         self.showMaximized()
 
+        self.resizeDocks([self.series_display, self.figure_settings],
+                         [420, 165],
+                         Qt.Horizontal)
         #!!! because for some reason it resizes this qcombobox??
         self.legend_toolbar.legend_location.setMinimumWidth(100)
         self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
 #        self.open_data_manager()
+
+    def get_current_figure(self):
+        return self.tab_base.currentWidget()
+
+    def all_figures(self):
+        return [self.tab_base.widget(i) for i in range(self.nfigs())]
+
+    def nfigs(self):
+        return self.tab_base.count()-1
+
+    def open_figure_titles(self):
+        return [self.tab_base.tabText(i) for i in range(self.nfigs())]
+
+    def close_tab(self, i):
+        if i != self.nfigs() and self.nfigs() != 1:
+            cf = self.tab_base.widget(i)
+            plt.close(cf.fig)
+            self.tab_base.blockSignals(True)
+            self.tab_base.removeTab(i)
+            self.tab_base.blockSignals(False)
+            if self.tab_base.currentIndex() == self.nfigs():
+                self.tab_base.setCurrentIndex(i-1)
+
+    def update_dock_widgets(self, i):
+        if i == self.nfigs():
+            default = Bunch(self.af_init)
+            title = default.title
+            count = 1
+            while default.title in self.open_figure_titles():
+                default.title = title + str(count)
+                count += 1
+            cf = AxesFrame(self, default)
+            self.tab_base.insertTab(i, cf, default.title)
+            self.tab_base.setCurrentIndex(i)
+            cf.replot()
+
+        cf = self.tab_base.widget(i)
+        sd = self.series_display
+        fs = self.figure_settings
+        sd.populate_tree('available', cf.available_data)
+        if len(cf.current_sps) == 1:
+            sp = cf.current_sps[0]
+            sd.populate_tree('plotted', sp.contents)
+        else:
+            sd.plotted.clear()
+        fs.update_fields(cf)
+        cf.update_toolbars()
 
     def popup(self, text, title=' ',
               informative=None, details=None,
@@ -193,11 +272,11 @@ class UI(QMainWindow):
         return contents
 
     def prep_fig(self):
-        af = self.axes_frame
+        cf = self.get_current_figure()
         fs = self.figure_settings
         fs.rename()
         fs.density.setValue(100)
-        af.select_subplot(None, force_select=[])
+        cf.select_subplot(None, force_select=[])
 
     def save(self):
         """Quick-save feature.
@@ -205,18 +284,18 @@ class UI(QMainWindow):
         if a file by that name already exists,
         else defers to explicit Save-As dialog.
         Accessible by Telemetry Grapher's File menu (or Ctrl+S)."""
-        af = self.axes_frame
-        filename = self.filename + '.jpg'
-        if af.first_save or filename not in os.listdir(self.fig_dir):
+        cf = self.get_current_figure()
+        filename = cf.fig_params.title + '.jpg'
+        if cf.first_save or filename not in os.listdir(self.fig_dir):
             self.save_as()
         else:
             self.prep_fig()
             plt.savefig(self.fig_dir + '\\' + filename,
                         dpi=300, transparent=True, bbox_inches='tight')
 #            with open(self.filename + '.pickle', 'wb') as f:
-#                pl.dump(af.fig, f)
+#                pl.dump(cf.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(self.fig_dir))
-            af.saved = True
+            cf.saved = True
 
     def save_as(self):
         """Explicit Save-As feature.
@@ -224,12 +303,12 @@ class UI(QMainWindow):
         Default format is .jpg.
         Accessible by Telemetry Grapher's File menu (or Ctrl+Shift+S)."""
         self.prep_fig()
-        af = self.axes_frame
+        cf = self.get_current_figure()
         dlg = QFileDialog()
         dlg.setFileMode(QFileDialog.AnyFile)
         dlg.setViewMode(QFileDialog.Detail)
         dlg_out = dlg.getSaveFileName(self, 'Save Figure',
-                                      self.fig_dir + '/' + self.filename,
+                                      self.fig_dir + '/' + cf.fig_params.title,
                                       'JPEG Image (*.jpg)')#;;PNG Image (*.png)
         if dlg_out[0]:
             savepath = dlg_out[0]
@@ -238,10 +317,10 @@ class UI(QMainWindow):
             plt.savefig(savepath,
                         dpi=300, transparent=True, bbox_inches='tight')
 #            with open(self.filename + '.pickle', 'wb') as f:
-#                pkl.dump(af.fig, f)
+#                pkl.dump(cf.fig, f)
             self.statusBar().showMessage('Saved to {}'.format(savepath))
-            af.saved = True
-            af.first_save = False
+            cf.saved = True
+            cf.first_save = False
 
     def parse_unit(self, header):
         """Parses unit information from header.
@@ -287,10 +366,10 @@ class UI(QMainWindow):
         If close event accepted,
         - hide any floating dockwidgets
         - close all created figures"""
-        af = self.axes_frame
-        # af.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
-        # This will change to if any([af.saved for af in axes_frames])
-        if not af.saved:
+        cf = self.get_current_figure()
+        cf.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
+        # This will change to if any([cf.saved for af in axes_frames])
+        if not cf.saved:
             result = self.popup('Figure has not been saved. Exit anyway?',
                                 title='Exiting Application')
             if result == QMessageBox.Cancel:
@@ -301,12 +380,11 @@ class UI(QMainWindow):
         for dock in [self.series_display, self.figure_settings]:
             if dock.isFloating(): dock.close()
         plt.close('all')
-        self.figure_settings.title_edit.editingFinished.disconnect()
         event.accept()
 
     def new(self):
-        self.logger.error('too many chairs in here.')
-        pass
+        # overriding for testing
+        print(self.tab_base.currentWidget())
 
     def set_app_style(self, qss, mpl_rcs, icon_path):
         app = QApplication.instance()
@@ -326,31 +404,33 @@ class UI(QMainWindow):
             a.setIcon(QIcon(icon_path+'/'+a.iconText()))
 
         for k,v in mpl_rcs.items(): plt.rcParams[k] = v
-        af = self.axes_frame
-        af.fig.set_facecolor(mpl_rcs['figure.facecolor'])
-        af.fig.set_edgecolor(mpl_rcs['figure.edgecolor'])
-        af.fig._suptitle.set_color(mpl_rcs['text.color'])
-        for sp in af.subplots:
-            for ax in sp.axes:
-                ax.set_facecolor(mpl_rcs['axes.facecolor'])
-                ax.patch.set_visible(False)
-                ax.yaxis.label.set_color(mpl_rcs['axes.labelcolor'])
-                for spine in ax.spines.values():
-                    spine.set_color(mpl_rcs['axes.edgecolor'])
-                for line in ax.get_xticklines():
-                    line.set_color(mpl_rcs['xtick.color'])
-                for line in ax.get_yticklines():
-                    line.set_color(mpl_rcs['ytick.color'])
-                for label in ax.get_xticklabels():
-                    label.set_color(mpl_rcs['xtick.color'])
-                for label in ax.get_yticklabels():
-                    label.set_color(mpl_rcs['ytick.color'])
-                for line in ax.get_xgridlines():
-                    line.set_color(mpl_rcs['grid.color'])
-                for line in ax.get_ygridlines():
-                    line.set_color(mpl_rcs['grid.color'])
-        af.replot()
-        af.draw()
+        for cf in self.all_figures():
+            cf.fig.set_facecolor(mpl_rcs['figure.facecolor'])
+            cf.fig.set_edgecolor(mpl_rcs['figure.edgecolor'])
+            cf.fig._suptitle.set_color(mpl_rcs['text.color'])
+            for sp in cf.subplots:
+                for ax in sp.axes:
+                    ax.set_facecolor(mpl_rcs['axes.facecolor'])
+                    ax.patch.set_visible(False)
+                    ax.yaxis.label.set_color(mpl_rcs['axes.labelcolor'])
+                    for spine in ax.spines.values():
+                        spine.set_color(mpl_rcs['axes.edgecolor'])
+                    for line in ax.get_xticklines():
+                        line.set_color(mpl_rcs['xtick.color'])
+                    for line in ax.get_yticklines():
+                        line.set_color(mpl_rcs['ytick.color'])
+                    for label in ax.get_xticklabels():
+                        label.set_color(mpl_rcs['xtick.color'])
+                    for label in ax.get_yticklabels():
+                        label.set_color(mpl_rcs['ytick.color'])
+                    for line in ax.get_xgridlines():
+                        line.set_color(mpl_rcs['grid.color'])
+                    for line in ax.get_ygridlines():
+                        line.set_color(mpl_rcs['grid.color'])
+            cf.replot()
+            cf.draw()
+        lt.legend_location.setMinimumWidth(100)
+        at.selector.setMinimumWidth(100)
 
     def open_fig(self):
         raise Exception
@@ -358,7 +438,7 @@ class UI(QMainWindow):
 #        print(self.figure_settings.unit_table.size())
 #        print(self.figure_settings.majorXgrid.isChecked())
 #        pass
-#        af = self.axes_frame
+#        cf = self.get_current_figure()
 #        dlg_output = QFileDialog.getOpenFileName(self,
 #                                                  "Open Saved Figure",
 #                                                  self.fig_dir,
@@ -368,7 +448,7 @@ class UI(QMainWindow):
 #            _ = plt.figure()
 #            manager = _.canvas.manager
 #            manager.canvas.figure = fig
-#            af.fig.set_canvas(manager.canvas)
+#            cf.fig.set_canvas(manager.canvas)
 #            print(fig)
 #            for ax in fig.axes:
 #                print(ax)
@@ -377,8 +457,8 @@ class UI(QMainWindow):
 #                h, l = ax.get_legend_handles_labels()
 #                print(h)
 #                print(l)
-#            af.fig.show()
-#            af.draw()
+#            cf.fig.show()
+#            cf.draw()
 
     def undo(self):
         pass
@@ -430,3 +510,4 @@ class UI(QMainWindow):
 #        cp = QDesktopWidget().availableGeometry().center()
 #        qr.moveCenter(cp)
 #        self.move(qr.topLeft())
+

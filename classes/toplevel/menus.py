@@ -69,10 +69,10 @@ class EditMenu(QMenu):
         redo_action.triggered.connect(ui.redo)
         self.addAction(redo_action)
 
-        refresh_action = QAction('Refresh Figure', ui)
-        refresh_action.setShortcut('Ctrl+R')
-        refresh_action.triggered.connect(ui.axes_frame._draw)
-        self.addAction(refresh_action)
+#        refresh_action = QAction('Refresh Figure', ui)
+#        refresh_action.setShortcut('Ctrl+R')
+#        refresh_action.triggered.connect(ui.axes_frame._draw)
+#        self.addAction(refresh_action)
 
 class ToolsMenu(QMenu):
     def __init__(self, title, parent):

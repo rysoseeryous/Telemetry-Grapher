@@ -38,6 +38,7 @@ class SeriesDisplay(QDockWidget):
     def __init__(self, parent, title):
         super().__init__(title)
         self.parent = parent
+        ui = self.parent
         grid = QGridLayout()
         w = QWidget()
         ncols = 1
@@ -71,7 +72,8 @@ class SeriesDisplay(QDockWidget):
         w.setLayout(grid)
         self.setWidget(w)
 
-        self.populate_tree('available', parent.axes_frame.available_data)
+        cf = ui.get_current_figure()
+        self.populate_tree('available', cf.available_data)
         self.available.expandAll()
         self.available.resizeColumnToContents(0)
 
@@ -113,8 +115,8 @@ class SeriesDisplay(QDockWidget):
     def transfer(self):
         """Swaps series or group references between available and plotted."""
         ui = self.parent
-        af = ui.axes_frame
-        sps = af.current_sps
+        cf = ui.get_current_figure()
+        sps = cf.current_sps
         if not sps:
             ui.statusBar().showMessage(
                     'Select a subplot to add or remove series')
@@ -152,17 +154,17 @@ class SeriesDisplay(QDockWidget):
 
                 if caller == self.add:
                     sp.add(contents)
-                    af.available_data.remove(contents)
+                    cf.available_data.remove(contents)
                 elif caller == self.remove:
                     sp.remove(contents)
-                    af.available_data.add(contents)
+                    cf.available_data.add(contents)
                 sp.plot()
                 sp.show_legend()
-                af.select_subplot(None, force_select=[sp])
-                af.update_gridspec()
-                af.draw()
+                cf.select_subplot(None, force_select=[sp])
+                cf.update_gridspec()
+                cf.draw()
                 # Populate both trees and reapply search filter
-                self.populate_tree('available', af.available_data)
+                self.populate_tree('available', cf.available_data)
                 self.populate_tree('plotted', sp.contents)
             else:
                 ui.statusBar().showMessage('No series selected')
@@ -171,9 +173,9 @@ class SeriesDisplay(QDockWidget):
         """Returns contents of selected subplot if exactly one is selected.
         Otherwise returns an empty ContentsDict object."""
         ui = self.parent
-        af = ui.axes_frame
-        if len(af.current_sps) == 1:
-            return af.current_sps[0].contents
+        cf = ui.get_current_figure()
+        if len(cf.current_sps) == 1:
+            return cf.current_sps[0].contents
         else:
             return ContentsDict()
 
@@ -183,7 +185,8 @@ class SeriesDisplay(QDockWidget):
         search_bar = QObject.sender(self)
         if search_bar == self.search_available:
             which = 'available'
-            data_set = self.parent.axes_frame.available_data
+            cf = self.parent.get_current_figure()
+            data_set = cf.available_data
         elif search_bar == self.search_plotted:
             which = 'plotted'
             data_set = self.get_sp_contents()
