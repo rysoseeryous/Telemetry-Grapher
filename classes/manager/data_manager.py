@@ -21,7 +21,6 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-import re
 from copy import copy, deepcopy
 
 from PyQt5.QtWidgets import (QApplication, QDialog, QMessageBox, QWidget,
@@ -32,6 +31,7 @@ from PyQt5.QtCore import Qt
 
 from .groups_tab import GroupsTab
 from .configure_tab import ConfigureTab
+from ..internal.contents_dict import ContentsDict
 
 class DataManager(QDialog):
     """Manages the importing of data and configuration of data groups."""
@@ -41,22 +41,21 @@ class DataManager(QDialog):
 
         super().__init__()
         self.parent = parent
-        cf = self.parent.get_current_figure()
+        ui = self.parent
         self.setWindowTitle('Data Manager')
         self.setWindowIcon(QIcon('rc/satellite.png'))
-        self.groups = deepcopy(cf.groups)
-        self.group_reassign = {name:[name] for name in self.groups}
+        self.all_groups = deepcopy(ui.all_groups)
+        self.group_rename = {name:[name] for name in self.all_groups}
+        self.fig_groups = {}
+#        self.group_rename = {}
+        for cf in ui.all_figures():
+            self.fig_groups[cf.title] = copy(cf.groups)
+#            self.group_rename[cf.title] = {name:[name] for name in cf.groups}
         self.modified = False
         self.resize(1000, 500)
         splitter = QSplitter(Qt.Vertical)
 
         self.tab_base = QTabWidget()
-        self.tab_base.setStyleSheet("""
-                                    QTabWidget::pane
-                                    {
-                                        top: -0.5ex;
-                                        bottom: 0ex;
-                                    }""")
         self.groups_tab = GroupsTab(self)
         self.configure_tab = ConfigureTab(self)
         self.tab_base.addTab(self.groups_tab, 'File Grouping')
@@ -113,13 +112,6 @@ class DataManager(QDialog):
         v_scrollbar = self.message_log.verticalScrollBar()
         v_scrollbar.setValue(v_scrollbar.maximum())
 
-    def derive_alias(self, s):
-        alias = s.alias
-        if not alias:
-            unit = s.unit
-            alias = re.sub('\[{}\]'.format(unit), '', s.header)
-        return alias.strip()
-
     def save_changes(self):
         """Saves groups created in Data Manager dialog to main window.
         Maps existing data to new data."""
@@ -128,48 +120,65 @@ class DataManager(QDialog):
         ui = self.parent
         sd = ui.series_display
         fs = ui.figure_settings
+
+        header_ref = deepcopy(ui.all_groups)
+        ui.all_groups = self.all_groups
+
+        for cf in ui.all_figures():
+            # Get new group: alias information from self.fig_groups
+            dm_contents = ui.groups_to_contents(self.fig_groups[cf.title])
+            cf.groups = self.fig_groups[cf.title]
+            for sp in cf.subplots:
+                new_contents = ContentsDict()
+                for sp_name in copy(tuple(sp.contents.keys())):
+                    # Rename/delete groups in subplots first
+                    try:
+                        dm_name = self.group_rename[sp_name][-1]
+                    except KeyError:
+                        del sp.contents[sp_name]
+                        for ax in sp.axes:
+                            if sp_name in ax.contents: del ax.contents[sp_name]
+                    else:
+                        group = ui.all_groups[dm_name]
+                        new_contents[dm_name] = []
+                        sp_headers = [header_ref[sp_name].get_header(alias) for
+                                      alias in sp.contents[sp_name]]
+                        for s in group.series(lambda s: s.keep):
+                            if s.header in sp_headers:
+                                if s.alias:
+                                    new_contents[dm_name].append(s.alias)
+                                    dm_contents[dm_name].remove(s.alias)
+                                else:
+                                    new_contents[dm_name].append(s.header)
+                                    dm_contents[dm_name].remove(s.header)
+                        if not dm_contents[dm_name]: del dm_contents[dm_name]
+                        if not new_contents[dm_name]: del new_contents[dm_name]
+                if new_contents:
+                    sp.contents.clear()
+                    for ax in sp.axes:
+                        ax.contents.clear()
+                    sp.add(new_contents, cf)
+                    for ax in [ax for ax in sp.axes if not ax.contents]:
+                        ax.remove()
+                        sp.axes.remove(ax)
+                else:
+                    sp.remove(deepcopy(sp.contents), cf)
+            # Dump everything else into cf.available_data
+            cf.available_data = dm_contents
+            cf.update_gridspec()
+            fs.cap_start_end(cf)
+            cf.draw()
+
+        # Reset group_rename
+        self.group_rename = {name:[name] for name in ui.all_groups}
         cf = ui.get_current_figure()
-
-        # Get new group: alias information from self.groups
-        dm_contents = ui.groups_to_contents(self.groups)
-        # Rename/delete groups in subplots first
-        for sp in cf.subplots:
-            for sp_name in copy(tuple(sp.contents.keys())):
-                try:
-                    dm_name = self.group_reassign[sp_name][-1]
-                    sp.contents[dm_name] = sp.contents[dm_name]
-                    if dm_name != sp_name: del sp.contents[sp_name]
-
-                    # Try to map old aliases to new
-                    sp_aliases = sp.contents[dm_name]
-                    dm_aliases = dm_contents[dm_name]
-                    f = cf.groups[sp_name].get_header
-                    headers = [f(alias) for alias in copy(sp_aliases)]
-                    sp_aliases.clear()
-                    for s in self.groups[dm_name].series(lambda s: s.keep):
-                        if s.header in headers:
-                            new_alias = self.derive_alias(s)
-                            sp_aliases.append(new_alias)
-                            dm_aliases.remove(new_alias)
-                        if not dm_aliases: del dm_aliases
-                except KeyError:
-                    del sp.contents[sp_name]
-
-        cf.groups = self.groups
-        fs.cap_start_end()
-        #reset group_reassign
-        self.group_reassign = {name:[name] for name in self.groups}
-        # Dump everything else into cf.available_data
-        cf.available_data = dm_contents
         sd.populate_tree('available', cf.available_data)
-
         sd.plotted.clear()
         if len(cf.current_sps) == 1:
             sp = cf.current_sps[0]
             sd.populate_tree('plotted', sp.contents)
         self.feedback('Saved data to main window.')
         self.modified = False
-        cf.saved = False
 
     def closeEvent(self, event):
         """Asks user to save changes before exiting."""
@@ -181,5 +190,5 @@ class DataManager(QDialog):
                 return
             elif choice == QMessageBox.Save:
                 self.save_changes()
-        QApplication.clipboard().clear()
+#        QApplication.clipboard().clear()
         event.accept()

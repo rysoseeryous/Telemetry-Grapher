@@ -111,6 +111,7 @@ class AxesToolbar(QToolBar):
         for ax in self.current_axes:
             ax.log = checked
             ax.set_yscale(log_dict[ax.log])
+        cf.format_axes()
         cf.draw()
 
     def manage_limit_indicators(self, checked):

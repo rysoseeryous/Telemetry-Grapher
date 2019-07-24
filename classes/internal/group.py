@@ -25,7 +25,8 @@ from .series import Series
 
 class Group():
 
-    def __init__(self, df):
+    def __init__(self, df, name):
+        self.name = name
         self.data = df
         self.series_dict = {header: Series(self, header, '')
                             for header in self.data.columns}
@@ -56,4 +57,4 @@ class Group():
         for series in self.series():
             print('\t{}\n\t\t{}'.format(series.header, series.summarize()))
         print('\nAssigned Aliases')
-        print('\t{}'.format(self.alias_dict))
+        print('\t{}'.format(self.alias_dict.keys()))

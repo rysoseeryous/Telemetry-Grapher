@@ -67,10 +67,10 @@ class EditableTabBar(QTabBar):
             cf = self.parent().widget(index)
             fig_title = re.sub('[\\\\.]', '', self._editor.text())
             if (fig_title not in ui.open_figure_titles() or
-                fig_title == cf.fig_params.title):
+                fig_title == cf.title):
                     self._editor.hide()
                     self.setTabText(index, self._editor.text())
                     cf.fig._suptitle.set_text(fig_title)
-                    cf.fig_params.title = fig_title
+                    cf.title = fig_title
                     cf.draw()
                     cf.saved = False

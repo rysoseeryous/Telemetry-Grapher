@@ -24,12 +24,12 @@ __license__ = "GNU General Public License"
 import datetime as dt
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import NullLocator, AutoMinorLocator, LogLocator
 from matplotlib.gridspec import GridSpec
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigCanvas
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt, QDateTime
+from PyQt5.QtCore import Qt
 
 from ..internal.subplot_manager import SubplotManager
 from ..internal.contents_dict import ContentsDict
@@ -46,33 +46,34 @@ class AxesFrame(FigCanvas):
     def _draw(self, event):
         self.draw()
 
-    def __init__(self, parent, fig_params):
+    def __init__(self, parent):
         self.fig = plt.figure()
         self.patch_figure(self.fig)
         super().__init__(self.fig)
         self.saved = True
-        self.first_save = True
+        self.never_saved = True
         self.parent = parent
-        self.fig_params = fig_params
+        ui = self.parent
+        for k,v in ui.af_init.items():
+            setattr(self, k, v)
 
         self.gs = GridSpec(1, 1,
-                           left=self.fig_params.left_pad,
-                           right=1-self.fig_params.right_pad,
-                           bottom=self.fig_params.lower_pad,
-                           top=1-self.fig_params.upper_pad,
-                           hspace=self.fig_params.spacing,
+                           left=self.left_pad,
+                           right=1-self.right_pad,
+                           bottom=self.lower_pad,
+                           top=1-self.upper_pad,
+                           hspace=self.spacing,
                            height_ratios=[1])
         ax0 = self.fig.add_subplot(self.gs[0])
         self.subplots = [SubplotManager(parent, ax0, index=0)]
         self.current_sps = []
-        self.groups = {}
+        self.groups = []
         self.available_data = ContentsDict()
-        #ui.groups_to_contents(self.groups)
 
         self.fig.canvas.mpl_connect('button_press_event', self.select_subplot)
         self.fig.canvas.mpl_connect('button_press_event', self._draw)
-        self.fig.suptitle(self.fig_params.title,
-                          fontsize=self.fig_params.title_size)
+        self.fig.suptitle(self.title,
+                          fontsize=self.title_size)
 
         self.start = dt.datetime.strptime('2000-01-01 00:00:00',
                                               '%Y-%m-%d  %H:%M:%S')
@@ -80,6 +81,14 @@ class AxesFrame(FigCanvas):
         self.major_locator = mdates.DayLocator()
         self.minor_locator = mdates.HourLocator(interval=12)
         self.draw()
+
+#    @property
+#    def title(self):
+#        return self.title
+#
+#    @title.setter
+#    def title(self, value):
+#        self.title = value
 
     def weights(self):
         return self.gs.get_height_ratios()
@@ -101,13 +110,13 @@ class AxesFrame(FigCanvas):
             if c1 and c2 and c3:
                 n += 1
                 break
-        left = self.fig_params.left_pad
-        right = 1 - self.fig_params.right_pad - self.fig_params.axis_offset*n
-        bottom = self.fig_params.lower_pad
-        top = 1 - self.fig_params.upper_pad
+        left = self.left_pad
+        right = 1 - self.right_pad - self.axis_offset*n
+        bottom = self.lower_pad
+        top = 1 - self.upper_pad
         self.gs = GridSpec(nplots, 1, height_ratios=weights,
                            left=left, right=right, bottom=bottom, top=top,
-                           hspace=self.fig_params.spacing)
+                           hspace=self.spacing)
         for i, sp in enumerate(self.subplots):
             sp.index = i
             for ax in sp.axes:
@@ -126,46 +135,52 @@ class AxesFrame(FigCanvas):
         """Manages figure axes ticks, tick labels."""
         linestyles = ['-', '--', ':', '-.']
 
-        self.fig._suptitle.set_fontsize(self.fig_params.title_size)
+        self.fig._suptitle.set_fontsize(self.title_size)
 
         for sp in self.subplots:
             for i, ax in enumerate(sp.axes):
                 ax.tick_params(axis='x', which='both',
                                labelbottom=False, bottom=False)
-                ax.yaxis.label.set_size(self.fig_params.label_size)
-                ax.tick_params(axis='y', labelsize=self.fig_params.tick_size)
+                ax.yaxis.label.set_size(self.label_size)
+                ax.tick_params(axis='y', labelsize=self.tick_size)
 
-                ax.minorticks_off()
-                if self.fig_params.MY:
+                if self.MY:
                     ax.yaxis.grid(which='major',
                                   linestyle=linestyles[i%len(linestyles)])
                 else:
                     ax.yaxis.grid(which='major', b=False)
-                if self.fig_params.my:
-                    if not ax.log:
+                if self.my:
+                    if ax.log:
+#                        ax.yaxis.set_minor_locator(LogLocator())
+                        ax.minorticks_on()
+                    else:
                         ax.yaxis.set_minor_locator(AutoMinorLocator())
-                    ax.yaxis.grid(which='minor',
+                    ax.tick_params(axis='y', which='minor',
+                                   labelleft=False, labelright=False)
+                    ax.yaxis.grid(which='both',
                                   linestyle=linestyles[i%len(linestyles)])
                 else:
-                    ax.yaxis.grid(which='minor', b=False)
+                    ax.yaxis.set_minor_locator(NullLocator())
+#                    ax.yaxis.grid(which='minor', b=False)
             if sp.contents:
                 if sp.index == len(self.subplots)-1:
                     sp.host().tick_params(axis='x', which='both',
                            labelbottom=True, bottom=True)
                     for tick in sp.host().xaxis.get_ticklabels():
-                        tick.set_size(self.fig_params.tick_size)
-                        tick.set_rotation(self.fig_params.tick_rot)
+                        tick.set_size(self.tick_size)
+                        tick.set_rotation(self.tick_rot)
                         tick.set_horizontalalignment('right')
                 sp.host().xaxis_date()
                 sp.host().xaxis.set_major_locator(self.major_locator)
-                if self.fig_params.mx:
+                if self.mx:
                     sp.host().xaxis.set_minor_locator(self.minor_locator)
                 else:
+                    sp.host().xaxis.set_minor_locator(NullLocator())
                     sp.host().xaxis.grid(which='minor', b=False)
                 sp.host().xaxis.set_major_formatter(
-                        mdates.DateFormatter(self.fig_params.tsf))
-            sp.host().xaxis.grid(which='major', b=self.fig_params.MX)
-            sp.host().xaxis.grid(which='minor', b=self.fig_params.mx)
+                        mdates.DateFormatter(self.tsf))
+            sp.host().xaxis.grid(which='major', b=self.MX)
+            sp.host().xaxis.grid(which='minor', b=self.mx)
             self.saved = False
 
     def get_subplot(self, event):
@@ -224,10 +239,6 @@ class AxesFrame(FigCanvas):
                 else:
                     select(self.current_sps, False)
                     select([sp])
-#                    for ax in sp.axes:
-#                        print(ax.label())
-#                        print('    ', ax.get_frame_on())
-#                        print('    ', ax.patch.get_visible())
         self.update_toolbars()
 
     def update_toolbars(self):
@@ -298,3 +309,16 @@ class AxesFrame(FigCanvas):
                         'Selected subplots: {}'.format(selected))
         else:
             ui.statusBar().showMessage('No subplot selected')
+
+    def prep_fig(self):
+        ui = self.parent
+        fs = ui.figure_settings
+        self.select_subplot(None, force_select=[])
+        fs.density.blockSignals(True)
+        fs.density.setValue(100)
+        fs.density.blockSignals(False)
+        self.density = 100
+        self.replot()
+        self.draw()
+
+

@@ -24,23 +24,27 @@ __license__ = "GNU General Public License"
 import os
 import re
 import json
+import datetime as dt
 import matplotlib.pyplot as plt
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow, QTabWidget,
-                             QMessageBox, QFileDialog, QTabBar)
+                             QMessageBox, QTabBar)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
 from .axes_frame import AxesFrame
 from .series_display import SeriesDisplay
 from .figure_settings import FigureSettings
-from .menus import FileMenu, EditMenu, ToolsMenu, ViewMenu
+from .file_menu import FileMenu
+from .edit_menu import EditMenu
+from .tools_menu import ToolsMenu
+from .view_menu import ViewMenu
 from .subplot_toolbar import SubplotToolbar
 from .legend_toolbar import LegendToolbar
 from .axes_toolbar import AxesToolbar
-from ..manager.data_manager import DataManager
+
 from ..internal.contents_dict import ContentsDict
-from ..internal.bunch import Bunch
+#from ..internal.bunch import Bunch
 from ..internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
@@ -48,45 +52,42 @@ class UI(QMainWindow):
 
     def __init__(self, logger):
         super().__init__()
+        self.logger = logger
+        self.logger.info(' Application opened at {}'
+                         .format(dt.datetime.now()))
         self.fig_dir = os.getcwd()
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
         self.auto_parse = True
-        self.logger = logger
+        self.all_groups = {}
+        self.bypass = False
 
-        f = QFile('rc/dark.qss')
-        if not f.exists():
-            self.logger.error('Unable to load dark stylesheet,'
-                              '\"{}\" not found'.format(f.fileName()))
-            self.dark_qss = ''
-        else:
-            f.open(QFile.ReadOnly | QFile.Text)
-            ts = QTextStream(f)
-            self.dark_qss = ts.readAll()
-        f = QFile('rc/light.qss')
-        if not f.exists():
-            self.logger.error('Unable to load light stylesheet,'
-                              '\"{}\" not found'.format(f.fileName()))
-            self.light_qss = ''
-        else:
-            f.open(QFile.ReadOnly | QFile.Text)
-            ts = QTextStream(f)
-            self.light_qss = ts.readAll()
+        stylesheets = []
+        for f in (QFile('rc/light.qss'), QFile('rc/dark.qss')):
+            if not f.exists():
+                self.logger.error('Unable to load stylesheet,'
+                                  '\"{}\" not found'.format(f.fileName()))
+                stylesheets.append('')
+            else:
+                f.open(QFile.ReadOnly | QFile.Text)
+                stylesheets.append(QTextStream(f).readAll())
+        self.light_qss, self.dark_qss = stylesheets
 
         # Read settings from config file
         with open('config.json', 'r', encoding='utf-8') as f:
-            startup = json.load(f)
-        self.unit_dict = startup['unit_dict']
-        self.unit_clarify = startup['unit_clarify']
-        self.user_units = startup['user_units']
-        self.default_type = startup['default_type']
-        self.default_unit = startup['default_unit']
-        self.light_rcs = startup['light_rcs']
-        self.dark_rcs = startup['dark_rcs']
-        self.mode = startup['start_mode']
-        obj = startup['highlight']
+            self.config = json.load(f)
+        self.unit_dict = self.config['unit_dict']
+        self.unit_clarify = self.config['unit_clarify']
+        self.user_units = self.config['user_units']
+        self.default_type = self.config['default_type']
+        self.default_unit = self.config['default_unit']
+        self.light_rcs = self.config['light_rcs']
+        self.dark_rcs = self.config['dark_rcs']
+        self.mode = self.config['start_mode']
+        obj = self.config['highlight']
         self.highlight = {True: obj['True'], False: obj['False']}
-        self.af_init = startup['af_init']
+        self.af_init = self.config['af_init']
+        self.csv_dir = self.config['csv_dir']
 
         if self.mode == 'light':
             self.current_qss = self.light_qss
@@ -118,8 +119,8 @@ class UI(QMainWindow):
         self.tab_base = QTabWidget()
         self.tab_bar = EditableTabBar(self)
         self.tab_base.setTabBar(self.tab_bar)
-        cf = AxesFrame(self, Bunch(self.af_init))
-        self.tab_base.addTab(cf, cf.fig_params.title)
+        cf = AxesFrame(self)
+        self.tab_base.addTab(cf, cf.title)
         self.tab_base.addTab(QWidget(), '+')
         self.tab_base.tabBar().setStyleSheet("""
                             QTabBar::tab:last
@@ -196,30 +197,11 @@ class UI(QMainWindow):
     def open_figure_titles(self):
         return [self.tab_base.tabText(i) for i in range(self.nfigs())]
 
-    def close_tab(self, i):
-        if i != self.nfigs() and self.nfigs() != 1:
-            cf = self.tab_base.widget(i)
-            plt.close(cf.fig)
-            self.tab_base.blockSignals(True)
-            self.tab_base.removeTab(i)
-            self.tab_base.blockSignals(False)
-            if self.tab_base.currentIndex() == self.nfigs():
-                self.tab_base.setCurrentIndex(i-1)
-
     def update_dock_widgets(self, i):
         if i == self.nfigs():
-            default = Bunch(self.af_init)
-            title = default.title
-            count = 1
-            while default.title in self.open_figure_titles():
-                default.title = title + str(count)
-                count += 1
-            cf = AxesFrame(self, default)
-            self.tab_base.insertTab(i, cf, default.title)
-            self.tab_base.setCurrentIndex(i)
-            cf.replot()
-
+            self.file_menu.new()
         cf = self.tab_base.widget(i)
+        savestate = cf.saved
         sd = self.series_display
         fs = self.figure_settings
         sd.populate_tree('available', cf.available_data)
@@ -230,6 +212,7 @@ class UI(QMainWindow):
             sd.plotted.clear()
         fs.update_fields(cf)
         cf.update_toolbars()
+        cf.saved = savestate
 
     def popup(self, text, title=' ',
               informative=None, details=None,
@@ -261,66 +244,16 @@ class UI(QMainWindow):
     def groups_to_contents(self, groups):
         """Converts groups database into contents format. See ReadMe."""
         contents = ContentsDict()
-        for group in groups:
+        for group_name in groups:
+            group = self.all_groups[group_name]
             aliases = []
-            for s in groups[group].series(lambda s: s.keep):
+            for s in group.series(lambda s: s.keep):
                 if s.alias:
                     aliases.append(s.alias)
                 else:
                     aliases.append(s.header)
-            contents.update({group: aliases})
+            contents.update({group_name: aliases})
         return contents
-
-    def prep_fig(self):
-        cf = self.get_current_figure()
-        fs = self.figure_settings
-        fs.rename()
-        fs.density.setValue(100)
-        cf.select_subplot(None, force_select=[])
-
-    def save(self):
-        """Quick-save feature.
-        Saves current figure to most recent save directory
-        if a file by that name already exists,
-        else defers to explicit Save-As dialog.
-        Accessible by Telemetry Grapher's File menu (or Ctrl+S)."""
-        cf = self.get_current_figure()
-        filename = cf.fig_params.title + '.jpg'
-        if cf.first_save or filename not in os.listdir(self.fig_dir):
-            self.save_as()
-        else:
-            self.prep_fig()
-            plt.savefig(self.fig_dir + '\\' + filename,
-                        dpi=300, transparent=True, bbox_inches='tight')
-#            with open(self.filename + '.pickle', 'wb') as f:
-#                pl.dump(cf.fig, f)
-            self.statusBar().showMessage('Saved to {}'.format(self.fig_dir))
-            cf.saved = True
-
-    def save_as(self):
-        """Explicit Save-As feature.
-        Saves current figure using PyQt5's file dialog.
-        Default format is .jpg.
-        Accessible by Telemetry Grapher's File menu (or Ctrl+Shift+S)."""
-        self.prep_fig()
-        cf = self.get_current_figure()
-        dlg = QFileDialog()
-        dlg.setFileMode(QFileDialog.AnyFile)
-        dlg.setViewMode(QFileDialog.Detail)
-        dlg_out = dlg.getSaveFileName(self, 'Save Figure',
-                                      self.fig_dir + '/' + cf.fig_params.title,
-                                      'JPEG Image (*.jpg)')#;;PNG Image (*.png)
-        if dlg_out[0]:
-            savepath = dlg_out[0]
-            # store saving directory
-            self.fig_dir = os.path.dirname(savepath)
-            plt.savefig(savepath,
-                        dpi=300, transparent=True, bbox_inches='tight')
-#            with open(self.filename + '.pickle', 'wb') as f:
-#                pkl.dump(cf.fig, f)
-            self.statusBar().showMessage('Saved to {}'.format(savepath))
-            cf.saved = True
-            cf.first_save = False
 
     def parse_unit(self, header):
         """Parses unit information from header.
@@ -360,31 +293,6 @@ class UI(QMainWindow):
                 return e
         # else, return default type
         return self.default_type
-
-    def closeEvent(self, event):
-        """Called when application is about to exit.
-        If close event accepted,
-        - hide any floating dockwidgets
-        - close all created figures"""
-        cf = self.get_current_figure()
-        cf.saved = True  # CONVENIENCE OVERRIDE, DELETE LATER #!!!
-        # This will change to if any([cf.saved for af in axes_frames])
-        if not cf.saved:
-            result = self.popup('Figure has not been saved. Exit anyway?',
-                                title='Exiting Application')
-            if result == QMessageBox.Cancel:
-                event.ignore()
-                return
-            elif result == QMessageBox.Save:
-                self.save()
-        for dock in [self.series_display, self.figure_settings]:
-            if dock.isFloating(): dock.close()
-        plt.close('all')
-        event.accept()
-
-    def new(self):
-        # overriding for testing
-        print(self.tab_base.currentWidget())
 
     def set_app_style(self, qss, mpl_rcs, icon_path):
         app = QApplication.instance()
@@ -432,82 +340,72 @@ class UI(QMainWindow):
         lt.legend_location.setMinimumWidth(100)
         at.selector.setMinimumWidth(100)
 
-    def open_fig(self):
-        raise Exception
-        pass
-#        print(self.figure_settings.unit_table.size())
-#        print(self.figure_settings.majorXgrid.isChecked())
-#        pass
-#        cf = self.get_current_figure()
-#        dlg_output = QFileDialog.getOpenFileName(self,
-#                                                  "Open Saved Figure",
-#                                                  self.fig_dir,
-#                                                  "(*.pickle)")
-#        if dlg_output[0]:
-#            fig = pkl.load(open(dlg_output[0], 'rb'))
-#            _ = plt.figure()
-#            manager = _.canvas.manager
-#            manager.canvas.figure = fig
-#            cf.fig.set_canvas(manager.canvas)
-#            print(fig)
-#            for ax in fig.axes:
-#                print(ax)
-#                print(ax.lines)
-#                print(ax.get_legend())
-#                h, l = ax.get_legend_handles_labels()
-#                print(h)
-#                print(l)
-#            cf.fig.show()
-#            cf.draw()
-
-    def undo(self):
-        pass
-
-    def redo(self):
-        pass
-
-    def open_data_manager(self):
-        """Opens Data Manager dialog.
-        Accessible through Telemetry Grapher's Tools menu (or Ctrl+D)."""
-        self.statusBar().showMessage('Opening Data Manager')
-        self.dlg = DataManager(self)
-        self.dlg.setWindowFlags(Qt.Window)
-        self.dlg.setModal(True)
-        self.dlg.show()
-
-    def import_template(self):
-        pass
-
-    def toggle_docks(self):
-        """Toggles visibility of dock widgets.
-        Accessible through Telemetry Grapher's View menu (or Ctrl+H)."""
-        docks = [self.series_display, self.figure_settings]
-        if any([not dock.isVisible() for dock in docks]):
-            for dock in docks: dock.show()
+    def close_tab(self, i):
+        if i == self.nfigs(): return
+        cf = self.tab_base.widget(i)
+        if self.nfigs() == 1:
+            if not cf.saved:
+                result = self.popup('{} has not been saved. Exit anyway?'
+                                    .format(cf.title),
+                                    title='Closing Tab',
+                                    informative='Application will exit.')
+            else:
+                result = self.popup('Closing the last tab will exit '
+                                'the application. Continue?',
+                                title='Exiting Application',
+                                mode='confirm')
+            if result == QMessageBox.Cancel:
+                return
+            elif result == QMessageBox.Save:
+                if not self.file_menu.save(): return
+            self.bypass = True
+            self.close()
         else:
-            for dock in docks: dock.hide()
+            if not cf.saved:
+                result = self.popup('{} has not been saved. Close anyway?'
+                                    .format(cf.title),
+                                    title='Closing Tab')
+                if result == QMessageBox.Cancel:
+                    return
+                elif result == QMessageBox.Save:
+                    if not self.file_menu.save(): return
+            plt.close(cf.fig)
+            self.tab_base.blockSignals(True)
+            self.tab_base.removeTab(i)
+            self.tab_base.blockSignals(False)
+            if self.tab_base.currentIndex() == self.nfigs():
+                self.tab_base.setCurrentIndex(i-1)
 
-    def toggle_dark_mode(self):
-        if self.mode == 'light':
-            self.mode = 'dark'
-            self.current_qss = self.dark_qss
-            self.current_rcs = self.dark_rcs
-            self.current_icon_path = 'rc/entypo/dark'
-        else:
-            self.mode = 'light'
-            self.current_qss = self.light_qss
-            self.current_rcs = self.light_rcs
-            self.current_icon_path = 'rc/entypo/light'
-        default_color = self.current_rcs['axes.labelcolor']
-        self.figure_settings.color_dict[None] = default_color
-        self.figure_settings.color_dict[''] = default_color
-        self.set_app_style(self.current_qss,
-                           self.current_rcs,
-                           self.current_icon_path)
-# Legacy
-#    def center(self):
-#        qr = self.frameGeometry()
-#        cp = QDesktopWidget().availableGeometry().center()
-#        qr.moveCenter(cp)
-#        self.move(qr.topLeft())
+    def closeEvent(self, event):
+        """Called when application is about to exit.
+        If close event accepted,
+        - hide any floating dockwidgets
+        - close all created figures"""
+        if not self.bypass:
+            for i in reversed(range(self.nfigs())):
+                self.tab_base.setCurrentIndex(i)
+                cf = self.tab_base.widget(i)
+                if not cf.saved:
+                    result = self.popup('{} has not been saved. Close anyway?'
+                                        .format(cf.title),
+                                        title='Exiting Application')
+                    if result == QMessageBox.Cancel:
+                        event.ignore()
+                        break
+                    elif result == QMessageBox.Save:
+                        if not self.file_menu.save():
+                            event.ignore()
+                            break
 
+        if event.isAccepted():
+            for dock in [self.series_display, self.figure_settings]:
+                if dock.isFloating(): dock.close()
+
+            self.config['start_mode'] = self.mode
+            self.config['csv_dir'] = self.csv_dir
+            with open('config.json', 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+
+            plt.close('all')
+            self.logger.info(' Application closed at {}\n'
+                             .format(dt.datetime.now()))

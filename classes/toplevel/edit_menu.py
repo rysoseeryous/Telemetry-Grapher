@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""bunch.py - Contains Bunch class definition."""
+"""edit_menu.py - Contains EditMenu class definition."""
 
 # This file is part of Telemetry-Grapher.
 
@@ -21,10 +21,30 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-class Bunch():
-    """Turns a dictionary into an object with attributes.
-    See http://code.activestate.com/recipes/
-    52308-the-simple-but-handy-collector-of-a-bunch-of-named/"""
+from PyQt5.QtWidgets import QMenu, QAction
 
-    def __init__(self, items):
-        self.__dict__.update(items)
+class EditMenu(QMenu):
+    def __init__(self, title, parent):
+        super().__init__(title)
+        self.parent = parent
+        ui = parent
+        undo_action = QAction('Undo', ui)
+        undo_action.setShortcut('Ctrl+Z')
+        undo_action.triggered.connect(self.undo)
+        self.addAction(undo_action)
+
+        redo_action = QAction('Redo', ui)
+        redo_action.setShortcut('Ctrl+Y')
+        redo_action.triggered.connect(self.redo)
+        self.addAction(redo_action)
+
+#        refresh_action = QAction('Refresh Figure', ui)
+#        refresh_action.setShortcut('Ctrl+R')
+#        refresh_action.triggered.connect(ui.axes_frame._draw)
+#        self.addAction(refresh_action)
+
+    def undo(self):
+        pass
+
+    def redo(self):
+        pass

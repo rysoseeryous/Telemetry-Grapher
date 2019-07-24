@@ -22,7 +22,6 @@ __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
 import re
-from copy import copy
 
 from PyQt5.QtWidgets import (QDockWidget, QGridLayout, QPushButton, QLineEdit,
                              QWidget, QTreeWidget, QTreeWidgetItem)

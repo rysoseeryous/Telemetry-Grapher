@@ -122,14 +122,16 @@ class SubplotManager():
             return ax
         return None
 
-    def add(self, contents):
+    def add(self, contents, cf=None):
         """Adds contents to sp.contents and distributes them into axes."""
         sp = self
         ui = self.parent
-        cf = ui.get_current_figure()
+        if cf is None:
+            cf = ui.get_current_figure()
         sp.contents.add(contents)
         for group_name in contents:
-            group = cf.groups[group_name]
+            group = ui.all_groups[group_name]
+#            group = cf.groups[group_name]
             for alias in contents[group_name]:
                 header = group.get_header(alias)
                 s = group.series(header)
@@ -142,14 +144,16 @@ class SubplotManager():
                     ax = par
                 ax.contents.add({group_name: [alias]})
 
-    def remove(self, contents):
+    def remove(self, contents, cf=None):
         """Removes contents from sp.contents and from their axes."""
         sp = self
         ui = self.parent
-        cf = ui.get_current_figure()
+        if cf is None:
+            cf = ui.get_current_figure()
         sp.contents.remove(contents)
         for group_name in contents:
-            group = cf.groups[group_name]
+            group = ui.all_groups[group_name]
+#            group = cf.groups[group_name]
             for alias in contents[group_name]:
                 header = group.get_header(alias)
                 s = group.series(header)
@@ -163,8 +167,9 @@ class SubplotManager():
             sp.patch_ax(ax)
             ax.set_id()
             sp.axes = [ax]
-            plt.setp(ax.spines.values(),
-                     linewidth=ui.highlight[True])
+            if sp in cf.current_sps:
+                plt.setp(ax.spines.values(),
+                         linewidth=ui.highlight[True])
 
     def plot(self, skeleton=False):
         """Plots all data in each axis according to current style settings."""
@@ -180,11 +185,9 @@ class SubplotManager():
         for ax in sp.axes:
             ax.clear()
             ax.patch.set_visible(False)
-#            lines = [line for line in ax.lines]
-#            for line in lines:
-#                .remove(line)
             for group_name in ax.contents:
-                group = cf.groups[group_name]
+                group = ui.all_groups[group_name]
+#                group = cf.groups[group_name]
                 df = group.data
                 subdf = df[(df.index >= cf.start) & (df.index <= cf.end)]
                 for alias in ax.contents[group_name]:
@@ -192,7 +195,7 @@ class SubplotManager():
                     s = group.series(header)
                     data = subdf[header]
                     n = len(data.index)
-                    d = cf.fig_params.density/100
+                    d = cf.density/100
                     thin = np.linspace(0, n-1, num=int(n*d), dtype=int)
                     data = data.iloc[thin]
                     data = data.map(lambda x: x*s.scale)
@@ -210,17 +213,20 @@ class SubplotManager():
                         color='C'+str(color_index%10)
                         color_index += 1
                         labelcolor = ui.current_rcs['axes.labelcolor']
-                    if cf.fig_params.scatter:
+                    if cf.scatter:
                         line, = ax.plot(data, style, color=color,
-                                        markersize=cf.fig_params.dot_size,
+                                        markersize=cf.dot_size,
                                         linestyle='None')
                     else:
                         line, = ax.plot(data, color=color)
                     sp.lines.append(line)
-                    sp.labels.append((s.alias, s.unit))
+                    if s.alias:
+                        sp.labels.append((s.alias, s.unit))
+                    else:
+                        sp.labels.append((header, s.unit))
             if ax.contents:
                 ax.set_ylabel(ax.label(),
-                              fontsize=cf.fig_params.label_size,
+                              fontsize=cf.label_size,
                               color=labelcolor)
                 ax.tick_params(axis='y', labelcolor=labelcolor)
                 ax.relim()
@@ -231,6 +237,8 @@ class SubplotManager():
                     ax.set_ylim(ax.custom_limits)
                 if ax.log:
                     ax.set_yscale('log')
+                else:
+                    ax.set_yscale('linear')
 
         sp.arrange_axes()
         cf.format_axes()
@@ -241,7 +249,7 @@ class SubplotManager():
         ui = self.parent
         cf = ui.get_current_figure()
         sp.host().set_host()
-        offset = cf.fig_params.axis_offset
+        offset = cf.axis_offset
         for i, ax in enumerate(sp.axes[1:]):
             ax.set_par(offset=1+offset*(i))
 
@@ -253,7 +261,7 @@ class SubplotManager():
             sp.legend.remove()
         if sp.legend_on and sp.contents:
             if sp.location == 'Outside Right':
-                offset = cf.fig_params.axis_offset
+                offset = cf.axis_offset
                 npars = len(sp.axes[1:])
                 bbox = (1+offset*npars, 0.5)
             elif sp.location == 'Outside Top':

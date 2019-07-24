@@ -810,10 +810,16 @@ QLabel
     border: 0ex solid black;
 }
 
-QTabWidget::pane
+QTabWidget::pane:bottom
 {
     border: 0.2ex solid #BAB9B8;
     bottom: -0.5ex;
+}
+
+QTabWidget::pane:top
+{
+    border: 0.2ex solid #BAB9B8;
+    top: -0.5ex;
 }
 
 QTabWidget::tab-bar
@@ -965,35 +971,42 @@ QListView
     background-color: #FCFCFC;
 }
 
-
-QTreeView::branch:has-siblings:!adjoins-item
+QTreeView::branch:!has-children:adjoins-item
 {
-    border-image: url(rc/light/stylesheet-vline.svg) 0;
-}
-
-QTreeView::branch:has-siblings:adjoins-item
-{
-    border-image: url(rc/light/stylesheet-branch-more.svg) 0;
+    border-image: url(rc/light/stylesheet-branch-more.png);
 }
 
 QTreeView::branch:!has-children:!has-siblings:adjoins-item
 {
-    border-image: url(rc/light/stylesheet-branch-end.svg) 0;
+    border-image: url(rc/light/stylesheet-branch-end.png);
 }
 
-QTreeView::branch:has-children:!has-siblings:closed,
-QTreeView::branch:closed:has-children:has-siblings
+QTreeView::branch:!has-children:has-siblings:!adjoins-item
 {
-    border-image: url(rc/light/stylesheet-branch-end-closed.svg) 0;
-    image: url(rc/light/branch_closed.svg);
+    border-image: url(rc/light/stylesheet-vline.png);
 }
 
-QTreeView::branch:open:has-children:!has-siblings,
-QTreeView::branch:open:has-children:has-siblings
+QTreeView::branch:has-children:closed
 {
-    border-image: url(rc/light/stylesheet-branch-end-open.svg) 0;
-    image: url(rc/light/branch_open.svg);
+    border-image: url(rc/light/branch-closed.png);
 }
+
+QTreeView::branch:has-children:closed:hover
+{
+    border-image: url(rc/light/branch-closed-hover.png);
+}
+
+QTreeView::branch:has-children:open
+{
+    border-image: url(rc/light/branch-open.png);
+}
+
+QTreeView::branch:has-children:open:hover
+{
+    border-image: url(rc/light/branch-open-hover.png);
+}
+/*
+ highlight blue: #33a4df */
 
 QTableView::item,
 QListView::item,

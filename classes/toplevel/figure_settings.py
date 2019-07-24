@@ -21,7 +21,6 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-import re
 import math
 import functools
 import datetime as dt
@@ -36,18 +35,17 @@ from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
                              QDateTimeEdit,
                              QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QColor
-from PyQt5.QtCore import Qt, QObject, QDateTime
+from PyQt5.QtCore import Qt, QObject
 
 from ..internal.q_color_button import QColorButton
 
 class FigureSettings(QDockWidget):
     """Contains options for controlling figure size and appearance."""
 
-    def __init__(self, parent, title, saved=None):
+    def __init__(self, parent, title):
         super().__init__(title)
         self.parent = parent
         ui = self.parent
-#        self.title_edited = False
         self.weights_edited = False
         # when color coordination is on,
         # use markers in this order to differentiate series
@@ -56,11 +54,6 @@ class FigureSettings(QDockWidget):
         w = QWidget()
         vbox = QVBoxLayout()
 
-#        form = QFormLayout()
-#        self.title_edit = QLineEdit()
-#        self.title_edit.editingFinished.connect(self.rename)
-#        self.title_edit.textEdited.connect(self.tte)
-#        vbox.addWidget(self.title_edit)
         figure_group= QGroupBox('Figure Dimensions')
         figure_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
@@ -207,43 +200,21 @@ class FigureSettings(QDockWidget):
         self.color_dict = {None:default_color, '':default_color}
         self.update_unit_table()
 
-    def rename(self):
-        """Renames figure."""
-        ui = self.parent
-        cf = ui.get_current_figure()
-        if self.title_edited:
-            # get rid of any backslashes or dots
-            fig_title = re.sub('[\\\\.]', '', self.title_edit.text())
-#            if not fig_title:
-#                cf.fig.suptitle('')
-#                fig_title = ui.af_init['title']
-#            else:
-            if fig_title in ui.open_figure_titles(): return
-            cf.fig._suptitle.set_text(fig_title)
-            cf.fig_params.title = fig_title
-            ui.tab_base.setTabText(ui.tab_base.currentIndex(), fig_title)
-            cf.draw()
-            ui.saved = False
-#            self.title_edited = False
-
-#    def tte(self):
-#        self.title_edited = True
-
     def update_gs_kwargs(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        cf.fig_params.upper_pad = self.upper_pad.value()
-        cf.fig_params.lower_pad = self.lower_pad.value()
-        cf.fig_params.left_pad = self.left_pad.value()
-        cf.fig_params.right_pad = self.right_pad.value()
-        cf.fig_params.spacing = self.spacing.value()
+        cf.upper_pad = self.upper_pad.value()
+        cf.lower_pad = self.lower_pad.value()
+        cf.left_pad = self.left_pad.value()
+        cf.right_pad = self.right_pad.value()
+        cf.spacing = self.spacing.value()
         cf.update_gridspec()
         cf.draw()
 
     def adjust_axes_offset(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        cf.fig_params.axis_offset = self.axis_offset.value()
+        cf.axis_offset = self.axis_offset.value()
         for sp in cf.subplots:
             sp.arrange_axes()
             sp.show_legend()
@@ -291,19 +262,19 @@ class FigureSettings(QDockWidget):
     def update_grid(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        cf.fig_params.MX = self.major_x.isChecked()
-        cf.fig_params.mx = self.minor_x.isChecked()
-        cf.fig_params.MY = self.major_y.isChecked()
-        cf.fig_params.my = self.minor_y.isChecked()
+        cf.MX = self.major_x.isChecked()
+        cf.mx = self.minor_x.isChecked()
+        cf.MY = self.major_y.isChecked()
+        cf.my = self.minor_y.isChecked()
         cf.format_axes()
         cf.draw()
 
     def update_plots(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        cf.fig_params.scatter = self.scatter.isChecked()
-        cf.fig_params.dot_size = self.dot_size.value()
-        cf.fig_params.density = self.density.value()
+        cf.scatter = self.scatter.isChecked()
+        cf.dot_size = self.dot_size.value()
+        cf.density = self.density.value()
         cf.replot()
         cf.draw()
 
@@ -318,24 +289,25 @@ class FigureSettings(QDockWidget):
         cf = ui.get_current_figure()
         cf.start = start.toPyDateTime()
         self.cap_start_end()
+        cf.draw()
 
     def update_end(self, end):
         ui = self.parent
         cf = ui.get_current_figure()
         cf.end = end.toPyDateTime()
         self.cap_start_end()
+        cf.draw()
 
-    def cap_start_end(self):
+    def cap_start_end(self, cf=None):
         """Limits start and end datetimes by loaded data extents."""
         ui = self.parent
-        cf = ui.get_current_figure()
+        if cf is None:
+            cf = ui.get_current_figure()
 
-        groups = cf.groups.values()
+        groups = [ui.all_groups[key] for key in cf.groups]
         if groups:
             data_start = min([group.data.index[0] for group in groups])
             data_end = max([group.data.index[-1] for group in groups])
-#            user_start = self.select_start.dateTime().toPyDateTime()
-#            user_end = self.select_end.dateTime().toPyDateTime()
             cf.start = max([data_start, cf.start])
             cf.end = min([data_end, cf.end])
         else:
@@ -345,29 +317,30 @@ class FigureSettings(QDockWidget):
 
         timespan = cf.end - cf.start
         if timespan >= dt.timedelta(days=4):
-            cf.major_locator = mdates.DayLocator()
-            cf.minor_locator = mdates.HourLocator(interval=12)
+            Mstep = 24
+            mstep = 12
         elif (timespan >= dt.timedelta(days=2) and
               timespan < dt.timedelta(days=4)):
-            cf.major_locator = mdates.DayLocator()
-            cf.minor_locator = mdates.HourLocator(interval=12)
+            Mstep = 24
+            mstep = 12
         else:
-            cf.major_locator = mdates.HourLocator(interval=2)
-            cf.minor_locator = mdates.HourLocator(interval=1)
+            Mstep = 2
+            mstep = 1
+        cf.major_locator = mdates.HourLocator(byhour=range(0, 24, Mstep))
+        cf.minor_locator = mdates.HourLocator(byhour=range(0, 24, mstep))
         self.select_start.setMinimumDateTime(data_start)
         self.select_start.setMaximumDateTime(cf.end)
         self.select_end.setMaximumDateTime(data_end)
         self.select_end.setMinimumDateTime(cf.start)
-        cf.replot(legend=False)
-        cf.draw()
+        cf.replot()
 
     def update_fonts(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        cf.fig_params.title_size = self.title_size.value()
-        cf.fig_params.label_size = self.label_size.value()
-        cf.fig_params.tick_size = self.tick_size.value()
-        cf.fig_params.tick_rot = self.tick_rot.value()
+        cf.title_size = self.title_size.value()
+        cf.label_size = self.label_size.value()
+        cf.tick_size = self.tick_size.value()
+        cf.tick_rot = self.tick_rot.value()
         cf.format_axes()
         cf.draw()
 
@@ -378,18 +351,18 @@ class FigureSettings(QDockWidget):
         codes = (
                 ('Code', 'Description', 'Values'),
                 ('', '', ''),
-                ('%d', 'Day of month', '[1-31]'),
-                ('%-d', 'Day of month', '[01-31]'),
+                ('%d', 'Day of month', '[01-31]'),
+#                ('%-d', 'Day of month', '[1-31]'),
                 ('%b', 'Short month', '[Jan-Dec]'),
                 ('%B', 'Long month', '[January-December]'),
                 ('%m', 'Month zero-pad', '[01-12]'),
-                ('%-m', 'Month\t', '[1-12]'),
+#                ('%-m', 'Month\t', '[1-12]'),
                 ('%y', 'Short year', '[00-99]'),
                 ('%Y', 'Year with century', '[2000-2099]'),
                 ('%H', '24-Hour zero-pad', '[00-23]'),
-                ('%-H', '24-Hour\t', '[0-23]'),
+#                ('%-H', '24-Hour\t', '[0-23]'),
                 ('%I', '12-Hour zero-pad', '[01-12]'),
-                ('%-I', '12-Hour\t', '[1-12]'),
+#                ('%-I', '12-Hour\t', '[1-12]'),
                 ('%M', 'Minute zero-pad', '[00-59]'),
                 ('%S', 'Second zero-pad', '[00-59]'),
                 )
@@ -398,15 +371,16 @@ class FigureSettings(QDockWidget):
             reference += '{}\t{}\t{}\n'.format(*code)
         reference += '\nSee strftime.org for more details'
         text, ok = tsf_dlg.getText(self, 'Edit Timestamp Format',
-                                   reference, text=cf.fig_params.tsf)
+                                   reference, text=cf.tsf)
         if ok:
             try:
                 dt.datetime.now().strftime(text)
-                cf.fig_params.tsf = text
-                cf.format_axes()
-                cf.draw()
             except ValueError:
                 self.edit_timestamp_format()
+            else:
+                cf.tsf = text
+                cf.format_axes()
+                cf.draw()
 
     def update_unit_table(self):
         """Updates table associating unit types with colors."""
@@ -453,26 +427,25 @@ class FigureSettings(QDockWidget):
     def update_fields(self, cf):
         widgets = self.findChildren(QWidget)
         for w in widgets: w.blockSignals(True)
-#        self.title_edit.setText(cf.fig_params.title)
-        self.upper_pad.setValue(cf.fig_params.upper_pad)
-        self.lower_pad.setValue(cf.fig_params.lower_pad)
-        self.left_pad.setValue(cf.fig_params.left_pad)
-        self.right_pad.setValue(cf.fig_params.right_pad)
-        self.spacing.setValue(cf.fig_params.spacing)
-        self.axis_offset.setValue(cf.fig_params.axis_offset)
+        self.upper_pad.setValue(cf.upper_pad)
+        self.lower_pad.setValue(cf.lower_pad)
+        self.left_pad.setValue(cf.left_pad)
+        self.right_pad.setValue(cf.right_pad)
+        self.spacing.setValue(cf.spacing)
+        self.axis_offset.setValue(cf.axis_offset)
         self.weights_edit.setText(str(cf.weights()))
-        self.major_x.setChecked(cf.fig_params.MX)
-        self.minor_x.setChecked(cf.fig_params.mx)
-        self.major_y.setChecked(cf.fig_params.MY)
-        self.minor_y.setChecked(cf.fig_params.my)
-        self.scatter.setChecked(cf.fig_params.scatter)
-        self.line.setChecked(not cf.fig_params.scatter)
-        self.dot_size.setValue(cf.fig_params.dot_size)
-        self.density.setValue(cf.fig_params.density)
-        self.title_size.setValue(cf.fig_params.title_size)
-        self.label_size.setValue(cf.fig_params.label_size)
-        self.tick_size.setValue(cf.fig_params.tick_size)
-        self.tick_rot.setValue(cf.fig_params.tick_rot)
+        self.major_x.setChecked(cf.MX)
+        self.minor_x.setChecked(cf.mx)
+        self.major_y.setChecked(cf.MY)
+        self.minor_y.setChecked(cf.my)
+        self.scatter.setChecked(cf.scatter)
+        self.line.setChecked(not cf.scatter)
+        self.dot_size.setValue(cf.dot_size)
+        self.density.setValue(cf.density)
+        self.title_size.setValue(cf.title_size)
+        self.label_size.setValue(cf.label_size)
+        self.tick_size.setValue(cf.tick_size)
+        self.tick_rot.setValue(cf.tick_rot)
         self.cap_start_end()
         self.select_start.setDateTime(cf.start)
         self.select_end.setDateTime(cf.end)

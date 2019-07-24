@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""__main__.py - Executes GUI."""
+"""__main__.py - Instantiates logger and executes GUI."""
 
 # This file is part of Telemetry-Grapher.
 
@@ -22,8 +22,10 @@ __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
 #if __name__ == '__main__':
-import sys
+import datetime as dt
 import logging
+import sys
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QCoreApplication
 # If you want to run from Anaconda Prompt, this should be .classes.ab
@@ -42,10 +44,11 @@ def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
         # call the default excepthook saved at __excepthook__
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    logger.critical("Unhandled exception",
+#    logger.basicConfig(format='%(asctime)s %(message)s')
+    logger.critical('Unhandled exception at {}'.format(dt.datetime.now()),
                     exc_info=(exc_type, exc_value, exc_traceback))
 
-#sys.excepthook = handle_unhandled_exception
+sys.excepthook = handle_unhandled_exception
 
 
 if 'app' not in locals():

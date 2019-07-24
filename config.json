@@ -115,7 +115,7 @@
     "savefig.edgecolor": "#31363b",
     "font.family": "serif"
   },
-  "start_mode": "dark",
+  "start_mode": "light",
   "highlight": {
     "True": 1.5,
     "False": 0.5
@@ -134,11 +134,12 @@
     "MY": false,
     "my": false,
     "scatter": true,
-    "dot_size": 0.50,
+    "dot_size": 0.5,
     "density": 100,
     "title_size": 30,
     "label_size": 12,
     "tick_size": 10,
     "tick_rot": 45
-  }
+  },
+  "csv_dir": "./tests"
 }

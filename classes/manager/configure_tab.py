@@ -21,6 +21,7 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import re
 import os
 import zipfile
 import pandas as pd
@@ -41,13 +42,12 @@ class ConfigureTab(QWidget):
         super().__init__()
         self.parent = parent
         dm = self.parent
-        ui = dm.parent
-        cf = ui.get_current_figure()
+
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
 
         self.select_group = QComboBox()
-        self.select_group.addItems(cf.groups.keys())
+        self.select_group.addItems(dm.all_groups.keys())
         self.select_group.currentIndexChanged.connect(self.display_header_info)
         vbox.addWidget(self.select_group)
 
@@ -69,9 +69,8 @@ class ConfigureTab(QWidget):
         vbox.addWidget(self.hide_unused)
 
         vbox.addStretch(1)
-        summary_group = QGroupBox('DataFrame Summary')
+        summary_group = QGroupBox('Data Summary')
         summary_group.setAlignment(Qt.AlignHCenter)
-#        summary_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.summary = QLabel()
         self.summary.setAlignment(Qt.AlignTop)
         summary_layout = QVBoxLayout()
@@ -83,22 +82,21 @@ class ConfigureTab(QWidget):
 
         self.header_table = QTableWidget()
         w = self.header_table
-        w.setRowCount(6)
+        w.setRowCount(5)
         h_header = w.horizontalHeader()
         h_header.sectionResized.connect(self.sync_col_width)
         h_header.setFixedHeight(23)
         w.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         w.setVerticalHeaderLabels(['Keep',
-                                   'Scale',
                                    'Original Header',
                                    'Alias',
                                    'Unit Type',
                                    'Unit'])
         v_header = w.verticalHeader()
-        v_header.setFixedWidth(146)
+        v_header.setFixedWidth(150)
         v_header.setDefaultSectionSize(23)
         v_header.setSectionResizeMode(QHeaderView.Fixed)
-        w.setFixedHeight(163)
+        w.setFixedHeight(115)
         vbox.addWidget(w)
 
         self.df_table = QTableView()
@@ -111,7 +109,7 @@ class ConfigureTab(QWidget):
         v_header = w.verticalHeader()
         v_header.setDefaultSectionSize(v_header.minimumSectionSize())
         v_header.setSectionResizeMode(QHeaderView.Fixed)
-        v_header.setFixedWidth(146)
+        v_header.setFixedWidth(150)
         vbox.addWidget(w)
         hbox.addLayout(vbox)
         self.setLayout(hbox)
@@ -124,7 +122,7 @@ class ConfigureTab(QWidget):
         """Reruns header parsing algorithm for selected columns."""
         dm = self.parent
         group_name = self.select_group.currentText()
-        group = dm.groups[group_name]
+        group = dm.all_groups[group_name]
         cols = [item.column() for item in self.header_table.selectedItems()]
         headers = [self.header_table.item(2, c).text() for c in set(cols)]
         report = dm.groups_tab.parse_series(group.series(headers))
@@ -155,10 +153,12 @@ class ConfigureTab(QWidget):
         ui.df_dir, local = os.path.split(dlg_out[0])
         filename, ext = os.path.splitext(local)
 
-        group = dm.groups[group_name]
+        group = dm.all_groups[group_name]
         aliases = {}
         for s in group.series(lambda s: s.keep):
-            alias = dm.derive_alias(s)
+            alias = s.alias
+            if not alias:
+                alias = re.sub('\[{}\]'.format(s.unit), '', s.header).strip()
             aliases[s.header] = ('{} [{}]'.format(alias, s.unit))
         df = group.data.loc[:, list(aliases.keys())]
         df.rename(columns=aliases, inplace=True)
@@ -220,10 +220,10 @@ class ConfigureTab(QWidget):
         dm = self.parent
         ui = dm.parent
         if self.hide_unused.isChecked():
-            f = lambda s: s.keep
+            which = lambda s: s.keep
         else:
-            f = None
-        for i, s in enumerate(group.series(f)):
+            which = None  # denotes all series
+        for i, s in enumerate(group.series(which)):
             keep_check = QCheckBox()
             keep_check.setChecked(s.keep)
             keep_check.setProperty("col", i)
@@ -235,13 +235,13 @@ class ConfigureTab(QWidget):
             _layout.setContentsMargins(0, 0, 0, 0)
             self.header_table.setCellWidget(0, i, _widget)
 
-            self.header_table.setItem(1, i, QTableWidgetItem(str(s.scale)))
+#            self.header_table.setItem(1, i, QTableWidgetItem(str(s.scale)))
 
             item = QTableWidgetItem(s.header)
             item.setFlags(Qt.ItemIsSelectable)
-            self.header_table.setItem(2, i, item)
+            self.header_table.setItem(1, i, item)
 
-            self.header_table.setItem(3, i, QTableWidgetItem(s.alias))
+            self.header_table.setItem(2, i, QTableWidgetItem(s.alias))
 
             type_combo = QComboBox()
             all_units = {**ui.unit_dict, **ui.user_units}
@@ -252,7 +252,7 @@ class ConfigureTab(QWidget):
             type_combo.setCurrentText(s.unit_type)
             type_combo.setProperty("col", i)
             type_combo.currentIndexChanged.connect(self.update_unit_combo)
-            self.header_table.setCellWidget(4, i, type_combo)
+            self.header_table.setCellWidget(3, i, type_combo)
 
             unit_combo = QComboBox()
             if s.unit_type:
@@ -266,7 +266,7 @@ class ConfigureTab(QWidget):
             unit_combo.setCurrentText(s.unit)
             unit_combo.setProperty("col", i)
             unit_combo.currentIndexChanged.connect(self.update_series_unit)
-            self.header_table.setCellWidget(5, i, unit_combo)
+            self.header_table.setCellWidget(4, i, unit_combo)
 
     def populate_df_table(self, group, df):
         shown_rows = 20
@@ -325,13 +325,12 @@ class ConfigureTab(QWidget):
         dm = self.parent
         group_name = self.select_group.currentText()
         if group_name:
-            group = dm.groups[group_name]
+            group = dm.all_groups[group_name]
             df = group.data
             self.summarize_data(df)
             self.populate_df_table(group, df)
-            self.header_table.setRowCount(6)
+            self.header_table.setRowCount(5)
             self.header_table.setVerticalHeaderLabels(['Keep',
-                                                       'Scale',
                                                        'Original Header',
                                                        'Alias',
                                                        'Unit Type',
@@ -349,7 +348,7 @@ class ConfigureTab(QWidget):
     def update_alias_scale(self, row, col):
         """Updates the alias and scaling factor of series."""
         dm = self.parent
-        group = dm.groups[self.select_group.currentText()]
+        group = dm.all_groups[self.select_group.currentText()]
         header = self.header_table.item(2, col).text()
         s = group.series(header)
         if row == 3:
@@ -406,7 +405,7 @@ class ConfigureTab(QWidget):
     def update_unit_combo(self):
         dm = self.parent
         ui = dm.parent
-        group = dm.groups[self.select_group.currentText()]
+        group = dm.all_groups[self.select_group.currentText()]
         type_combo = QObject.sender(self)
         col = type_combo.property("col")
         unit_type = type_combo.currentText()
@@ -425,7 +424,7 @@ class ConfigureTab(QWidget):
 
     def update_series_unit(self):
         dm = self.parent
-        group = dm.groups[self.select_group.currentText()]
+        group = dm.all_groups[self.select_group.currentText()]
         unit_combo = QObject.sender(self)
         col = unit_combo.property("col")
         unit = unit_combo.currentText()
@@ -436,7 +435,7 @@ class ConfigureTab(QWidget):
 
     def update_keep(self):
         dm = self.parent
-        group = dm.groups[self.select_group.currentText()]
+        group = dm.all_groups[self.select_group.currentText()]
         keep_check = QObject.sender(self)
         selected = self.header_table.selectedItems()
         columns = [keep_check.property("col")]

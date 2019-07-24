@@ -826,10 +826,16 @@ QLabel
     border: 0ex solid black;
 }
 
-QTabWidget::pane
+QTabWidget::pane:bottom
 {
     border: 0.2ex solid #76797c;
     bottom: -0.5ex;
+}
+
+QTabWidget::pane:top
+{
+    border: 0.2ex solid #76797c;
+    top: -0.5ex;
 }
 
 QTabWidget::tab-bar
@@ -980,64 +986,40 @@ QListView
     background-color: #232629;
 }
 
-QTreeView::branch:has-siblings:!adjoins-item
+QTreeView::branch:!has-children:adjoins-item
 {
-    border-image: url(rc/dark/stylesheet-vline.svg) 0;
-}
-
-QTreeView::branch:has-siblings:adjoins-item
-{
-    border-image: url(rc/dark/stylesheet-branch-more.svg) 0;
+    border-image: url(rc/dark/stylesheet-branch-more.png);
 }
 
 QTreeView::branch:!has-children:!has-siblings:adjoins-item
 {
-    border-image: url(rc/dark/stylesheet-branch-end.svg) 0;
+    border-image: url(rc/dark/stylesheet-branch-end.png);
 }
 
-QTreeView::branch:has-children:!has-siblings:closed,
-QTreeView::branch:closed:has-children:has-siblings
+QTreeView::branch:!has-children:has-siblings:!adjoins-item
 {
-    border-image: url(rc/dark/stylesheet-branch-end-closed.svg) 0;
-    image: url(rc/dark/branch_closed.svg);
+    border-image: url(rc/dark/stylesheet-vline.png);
 }
 
-QTreeView::branch:open:has-children:!has-siblings,
-QTreeView::branch:open:has-children:has-siblings
+QTreeView::branch:has-children:closed
 {
-    border-image: url(rc/dark/stylesheet-branch-end-open.svg) 0;
-    image: url(rc/dark/branch_open.svg);
+    border-image: url(rc/dark/branch-closed.png);
 }
 
-/*
-QTreeView::branch:has-siblings:!adjoins-item {
-        background: cyan;
+QTreeView::branch:has-children:closed:hover
+{
+    border-image: url(rc/dark/branch-closed-hover.png);
 }
 
-QTreeView::branch:has-siblings:adjoins-item {
-        background: red;
+QTreeView::branch:has-children:open
+{
+    border-image: url(rc/dark/branch-open.png);
 }
 
-QTreeView::branch:!has-children:!has-siblings:adjoins-item {
-        background: blue;
+QTreeView::branch:has-children:open:hover
+{
+    border-image: url(rc/dark/branch-open-hover.png);
 }
-
-QTreeView::branch:closed:has-children:has-siblings {
-        background: pink;
-}
-
-QTreeView::branch:has-children:!has-siblings:closed {
-        background: gray;
-}
-
-QTreeView::branch:open:has-children:has-siblings {
-        background: magenta;
-}
-
-QTreeView::branch:open:has-children:!has-siblings {
-        background: green;
-}
-*/
 
 QTableView::item,
 QListView::item,
