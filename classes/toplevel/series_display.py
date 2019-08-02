@@ -71,8 +71,8 @@ class SeriesDisplay(QDockWidget):
         w.setLayout(grid)
         self.setWidget(w)
 
-        cf = ui.get_current_figure()
-        self.populate_tree('available', cf.available_data)
+#        cf = ui.get_current_figure()
+#        self.populate_tree('available', cf.available_data)
         self.available.expandAll()
         self.available.resizeColumnToContents(0)
 

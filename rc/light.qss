@@ -341,6 +341,11 @@ QMenuBar:focus
 {
     border: 0.2ex solid #33A4DF;
 }
+/*
+QWidget:!focus,
+{
+    border: 0.2ex solid #3A3939;
+}*/
 
 QTabWidget:focus,
 QCheckBox:focus,

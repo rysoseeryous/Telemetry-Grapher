@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""series.py - Contains Series class definition."""
+"""item_edit.py - Contains ItemEdit class definition."""
 
 # This file is part of Telemetry-Grapher.
 
@@ -21,32 +21,26 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-class Series():
+from PyQt5.QtWidgets import QLineEdit
 
-    def __init__(self, group, header, alias, unit_type=None, unit=None):
-        self.group = group
-        self.header = header
-        self.alias = alias
-        if unit_type is None:
-            unit_type = ''
-        self.unit_type = unit_type
-        if unit is None:
-            unit = ''
-        self.unit = unit
-        self.scale = 1.0
-        self.keep = True
-        self.color = None
+class ItemEdit(QLineEdit):
 
-    def get_unit_type(self):
-        return self.unit_type
+    def __init__(self, text, ct):
+        super().__init__(text)
+        self.returnPressed.connect(self.leave)
 
-    def get_unit(self):
-        return self.unit
+    def focusInEvent(self, event):
+        self.selectAll()
+        QLineEdit.focusInEvent(self, event)
 
-    def summarize(self):
-        return ('Header: '+str(self.header),
-                'Alias: '+str(self.alias),
-                'Unit Type: '+str(self.unit_type),
-                'Unit: '+str(self.unit),
-                'Scale: '+str(self.scale),
-                'Keep: '+str(self.keep))
+    def focusOutEvent(self, event):
+        self.home(False)
+        QLineEdit.focusOutEvent(self, event)
+
+    def mouseDoubleClickEvent(self, event):
+        QLineEdit.mouseDoubleClickEvent(self, event)
+        self.selectAll()
+
+    def leave(self):
+        self.deselect()
+        self.clearFocus()

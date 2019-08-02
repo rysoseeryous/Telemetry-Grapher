@@ -26,15 +26,15 @@ import os
 import zipfile
 import pandas as pd
 
-from PyQt5.QtWidgets import (QWidget, QFileDialog, QSizePolicy,
+from PyQt5.QtWidgets import (QWidget, QFileDialog,
                              QHBoxLayout, QVBoxLayout, QGroupBox,
                              QPushButton, QLabel, QCheckBox, QComboBox,
-                             QAbstractItemView, QHeaderView,
-                             QTableView, QTableWidget, QTableWidgetItem)
-from PyQt5.QtCore import Qt, QObject, QSortFilterProxyModel
+                             QTableView, QAbstractItemView, QHeaderView,
+                             QTableWidget)
+from PyQt5.QtCore import Qt, QSortFilterProxyModel
 
-from .unit_settings import UnitSettings
 from ..internal.pandas_model import PandasModel
+from ..internal.series_header_stack import SeriesHeaderStack
 
 class ConfigureTab(QWidget):
 
@@ -42,22 +42,19 @@ class ConfigureTab(QWidget):
         super().__init__()
         self.parent = parent
         dm = self.parent
+        self.stacks = []
 
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
 
         self.select_group = QComboBox()
         self.select_group.addItems(dm.all_groups.keys())
-        self.select_group.currentIndexChanged.connect(self.display_header_info)
+        self.select_group.currentTextChanged.connect(self.display_header_info)
         vbox.addWidget(self.select_group)
 
         self.export = QPushButton('Export DataFrame')
         self.export.clicked.connect(self.export_data)
         vbox.addWidget(self.export)
-
-        self.settings = QPushButton('Unit Settings')
-        self.settings.clicked.connect(self.open_settings)
-        vbox.addWidget(self.settings)
 
         self.reparse = QPushButton('Reparse Headers')
         self.reparse.clicked.connect(self.reparse_units)
@@ -82,21 +79,15 @@ class ConfigureTab(QWidget):
 
         self.header_table = QTableWidget()
         w = self.header_table
-        w.setRowCount(5)
         h_header = w.horizontalHeader()
         h_header.sectionResized.connect(self.sync_col_width)
         h_header.setFixedHeight(23)
         w.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        w.setVerticalHeaderLabels(['Keep',
-                                   'Original Header',
-                                   'Alias',
-                                   'Unit Type',
-                                   'Unit'])
         v_header = w.verticalHeader()
         v_header.setFixedWidth(150)
         v_header.setDefaultSectionSize(23)
         v_header.setSectionResizeMode(QHeaderView.Fixed)
-        w.setFixedHeight(115)
+        w.setFixedHeight(140)
         vbox.addWidget(w)
 
         self.df_table = QTableView()
@@ -118,18 +109,120 @@ class ConfigureTab(QWidget):
             self.display_header_info()
             self.parent.modified = False
 
-    def reparse_units(self):
-        """Reruns header parsing algorithm for selected columns."""
+    def sync_scroll(self, idx):
+        self.header_table.horizontalScrollBar().setValue(idx)
+
+    def sync_col_width(self, col, old_size, new_size):
+        self.df_table.horizontalHeader().resizeSection(col, new_size)
+
+    def display_header_info(self):
+        self.summarize_data()
+        self.populate_df_table()
+        self.populate_header_table()
+
+    def populate_df_table(self):
         dm = self.parent
         group_name = self.select_group.currentText()
+        if not group_name:
+            self.model = PandasModel(pd.DataFrame())
+            self.proxy.setSourceModel(self.model)
+            return
         group = dm.all_groups[group_name]
-        cols = [item.column() for item in self.header_table.selectedItems()]
-        headers = [self.header_table.item(2, c).text() for c in set(cols)]
-        report = dm.groups_tab.parse_series(group.series(headers))
-        dm.configure_tab.header_table.blockSignals(True)
-        dm.configure_tab.populate_header_table(group)
-        dm.configure_tab.header_table.blockSignals(False)
-        dm.groups_tab.report_parse_error_log(report)
+        df = group.data
+        shown_rows = 20
+        headers = [s.header for s in group.series(lambda s: s.keep)]
+        if len(df.index) > shown_rows:
+            upper_df = df.head(shown_rows//2)
+            lower_df = df.tail(shown_rows//2)
+            if self.hide_unused.isChecked():
+                upper_df = upper_df.loc[:, headers]
+                lower_df = lower_df.loc[:, headers]
+            ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                    index=upper_df.columns,
+                                    columns=['...']).T
+            shown_df = upper_df.append(ellipses).append(lower_df)
+        else:
+            if self.hide_unused.isChecked():
+                shown_df = df.loc[:, headers]
+            else:
+                shown_df = df
+        new_index = []
+        for ts in shown_df.index:
+            if hasattr(ts, 'strftime'):
+                new_index.append(ts.strftime('%Y-%m-%d  %H:%M:%S'))
+            else:
+                new_index.append('...')
+        shown_df.index = new_index
+
+        self.model = PandasModel(shown_df)
+        self.proxy.setSourceModel(self.model)
+
+    def days_hours_minutes(self, timedelta):
+        return (timedelta.days,
+                timedelta.seconds//3600,
+                (timedelta.seconds//60)%60)
+
+    def summarize_data(self):
+        dm = self.parent
+        group_name = self.select_group.currentText()
+        if not group_name:
+            self.summary.setText('')
+            return
+        group = dm.all_groups[group_name]
+        df = group.data
+        start = min(df.index)
+        end = max(df.index)
+        total_span = self.days_hours_minutes(end - start)
+        sampling_rate = 0; i = 1
+        while sampling_rate == 0:
+            sampling_rate = (df.index[i]-df.index[i-1]).total_seconds()
+            i += 1
+        shape_info = ('Shape Info:\n    {} rows\n    {} columns'
+                      .format(*df.shape))
+        data_start = ('Data Start:\n    {}'
+                      .format(start.strftime('%Y-%m-%d  %H:%M:%S')))
+        data_end = ('Data End:\n    {}'
+                    .format(end.strftime('%Y-%m-%d  %H:%M:%S')))
+        span_info = ('Total Span:\n    {} days\n    {} hours\n    {} minutes'
+                     .format(*total_span))
+        rate_info = ('Sampling Rate:\n    {} s'
+                     .format(sampling_rate))
+        summary = (shape_info + '\n' +
+                   data_start + '\n' +
+                   data_end + '\n' +
+                   span_info + '\n' +
+                   rate_info)
+        self.summary.setText(summary)
+
+    def populate_header_table(self):
+        dm = self.parent
+        group_name = self.select_group.currentText()
+        self.header_table.clear()
+        if not group_name:
+            self.header_table.setRowCount(0)
+            self.header_table.setColumnCount(0)
+            return
+        group = dm.all_groups[group_name]
+        self.header_table.setRowCount(5)
+        n = len(self.model._data.columns)
+        self.header_table.setColumnCount(n)
+        self.header_table.setVerticalHeaderLabels(
+                ['Keep', 'Original Header', 'Alias', 'Unit Type', 'Unit']
+                )
+        if self.hide_unused.isChecked():
+            which = lambda s: s.keep
+        else:
+            which = None  # denotes all series
+        self.stacks = []
+        for i, s in enumerate(group.series(which)):
+            stack = SeriesHeaderStack(self, i, s)
+            self.stacks.append(stack)
+            for w in [stack.keep_widget,
+                      stack.header_item,
+                      stack.alias_item,
+                      stack.type_combo,
+                      stack.unit_combo]:
+                self.header_table.setCellWidget(w.row, i, w)
 
     def export_data(self):
         """Generate an CSV file for selected group.
@@ -195,259 +288,15 @@ class ConfigureTab(QWidget):
             dm.feedback('Failed', mode='append')
             dm.feedback('Permission denied. {}'.format(e))
 
-    def sync_scroll(self, idx):
-        self.header_table.horizontalScrollBar().setValue(idx)
-
-    def sync_col_width(self, col, old_size, new_size):
-        self.df_table.horizontalHeader().resizeSection(col, new_size)
-
-    def days_hours_minutes(self, timedelta):
-        return (timedelta.days,
-                timedelta.seconds//3600,
-                (timedelta.seconds//60)%60)
-
-    def df_span_info(self, df):
-        start = min(df.index)
-        end = max(df.index)
-        total_span = self.days_hours_minutes(end - start)
-        time_interval = 0; i = 1
-        while time_interval == 0:
-            time_interval = (df.index[i]-df.index[i-1]).total_seconds()
-            i += 1
-        return df.shape, start, end, total_span, time_interval
-
-    def populate_header_table(self, group):
+    def reparse_units(self):
+        """Reruns header parsing algorithm for selected columns."""
         dm = self.parent
-        ui = dm.parent
-        if self.hide_unused.isChecked():
-            which = lambda s: s.keep
-        else:
-            which = None  # denotes all series
-        for i, s in enumerate(group.series(which)):
-            keep_check = QCheckBox()
-            keep_check.setChecked(s.keep)
-            keep_check.setProperty("col", i)
-            keep_check.stateChanged.connect(self.update_keep)
-            _widget = QWidget()
-            _layout = QHBoxLayout(_widget)
-            _layout.addWidget(keep_check)
-            _layout.setAlignment(Qt.AlignCenter)
-            _layout.setContentsMargins(0, 0, 0, 0)
-            self.header_table.setCellWidget(0, i, _widget)
-
-#            self.header_table.setItem(1, i, QTableWidgetItem(str(s.scale)))
-
-            item = QTableWidgetItem(s.header)
-            item.setFlags(Qt.ItemIsSelectable)
-            self.header_table.setItem(1, i, item)
-
-            self.header_table.setItem(2, i, QTableWidgetItem(s.alias))
-
-            type_combo = QComboBox()
-            all_units = {**ui.unit_dict, **ui.user_units}
-            if ui.default_type and ui.default_type not in all_units:
-                type_combo.addItem(ui.default_type)
-            type_combo.addItem('')
-            type_combo.addItems(list(all_units.keys()))
-            type_combo.setCurrentText(s.unit_type)
-            type_combo.setProperty("col", i)
-            type_combo.currentIndexChanged.connect(self.update_unit_combo)
-            self.header_table.setCellWidget(3, i, type_combo)
-
-            unit_combo = QComboBox()
-            if s.unit_type:
-                if s.unit_type in all_units:
-                    unit_combo.addItems(list(all_units[s.unit_type]))
-                else:
-                    unit_combo.addItem(ui.default_unit)
-            else:
-                unit_combo.addItem(ui.default_unit)
-
-            unit_combo.setCurrentText(s.unit)
-            unit_combo.setProperty("col", i)
-            unit_combo.currentIndexChanged.connect(self.update_series_unit)
-            self.header_table.setCellWidget(4, i, unit_combo)
-
-    def populate_df_table(self, group, df):
-        shown_rows = 20
-        headers = [s.header for s in group.series(lambda s: s.keep)]
-        if len(df.index) > shown_rows:
-            upper_df = df.head(shown_rows//2)
-            lower_df = df.tail(shown_rows//2)
-            if self.hide_unused.isChecked():
-                upper_df = upper_df.loc[:, headers]
-                lower_df = lower_df.loc[:, headers]
-            ellipses = pd.DataFrame(['...']*len(upper_df.columns),
-                                    index=upper_df.columns,
-                                    columns=['...']).T
-            shown_df = upper_df.append(ellipses).append(lower_df)
-        else:
-            if self.hide_unused.isChecked():
-                shown_df = df.loc[:, headers]
-            else:
-                shown_df = df
-        new_index = []
-        for ts in shown_df.index:
-            if hasattr(ts, 'strftime'):
-                new_index.append(ts.strftime('%Y-%m-%d  %H:%M:%S'))
-            else:
-                new_index.append('...')
-        shown_df.index = new_index
-
-        self.model = PandasModel(shown_df)
-        self.proxy.setSourceModel(self.model)
-        self.header_table.setColumnCount(len(shown_df.columns))
-
-    def summarize_data(self, df):
-        shape, start, end, total_span, sampling_rate = self.df_span_info(df)
-        shape_info = ('Shape Info:\n    {} rows\n    {} columns'
-                      .format(*shape))
-        data_start = ('Data Start:\n    {}'
-                      .format(start.strftime('%Y-%m-%d  %H:%M:%S')))
-        data_end = ('Data End:\n    {}'
-                    .format(end.strftime('%Y-%m-%d  %H:%M:%S')))
-        span_info = ('Total Span:\n    {} days\n    {} hours\n    {} minutes'
-                     .format(*total_span))
-        rate_info = ('Sampling Rate:\n    {} s'
-                     .format(sampling_rate))
-        summary = (shape_info + '\n' +
-                   data_start + '\n' +
-                   data_end + '\n' +
-                   span_info + '\n' +
-                   rate_info)
-        self.summary.setText(summary)
-
-    def display_header_info(self):
-        try:
-            self.header_table.cellChanged.disconnect(self.update_alias_scale)
-        except TypeError:
-            pass
-        dm = self.parent
-        group_name = self.select_group.currentText()
-        if group_name:
-            group = dm.all_groups[group_name]
-            df = group.data
-            self.summarize_data(df)
-            self.populate_df_table(group, df)
-            self.header_table.setRowCount(5)
-            self.header_table.setVerticalHeaderLabels(['Keep',
-                                                       'Original Header',
-                                                       'Alias',
-                                                       'Unit Type',
-                                                       'Unit'])
-            self.populate_header_table(group)
-        else:
-            self.summary.setText('')
-            self.header_table.clear()
-            self.header_table.setRowCount(0)
-            self.header_table.setColumnCount(0)
-            self.model = PandasModel(pd.DataFrame())
-            self.proxy.setSourceModel(self.model)
-        self.header_table.cellChanged.connect(self.update_alias_scale)
-
-    def update_alias_scale(self, row, col):
-        """Updates the alias and scaling factor of series."""
-        dm = self.parent
-        group = dm.all_groups[self.select_group.currentText()]
-        header = self.header_table.item(2, col).text()
-        s = group.series(header)
-        if row == 3:
-            # remove any trailing/leading whitespace
-            alias = self.header_table.item(3, col).text().strip()
-
-            def remove_key_by_value(dictionary, value):
-                for key in dictionary:
-                    if dictionary[key] == value:
-                        del dictionary[key]
-                        break
-
-            if alias and alias != s.alias:
-                accept = True
-                if alias in group.alias_dict:
-                    dm.feedback('Alias "{}" is already in use.'
-                                'Please choose a different alias.'
-                                .format(alias))
-                    accept = False
-                if alias in group.data.columns:
-                    dm.feedback('Alias "{}" is the name of an original header.'
-                                'Please choose a different alias.'
-                                .format(alias))
-                    accept = False
-                if not accept:
-                    self.header_table.blockSignals(True)
-                    reset = s.alias
-                    self.header_table.setItem(3, col, QTableWidgetItem(reset))
-                    self.header_table.blockSignals(False)
-                    return
-                s.alias = alias
-                remove_key_by_value(group.alias_dict, header)
-                group.alias_dict[alias] = header
-            else:
-                s.alias = ''
-                remove_key_by_value(group.alias_dict, header)
-            dm.modified = True
-        elif row == 1:
-            scale = self.header_table.item(1, col).text()
-            try:
-                scale = float(scale)
-                if scale == 0: raise ValueError
-                s.scale = scale
-                dm.modified = True
-            except ValueError:
-                dm.feedback('"{}" is not a valid scaling factor.'
-                            'Only nonzero real numbers permitted.'
-                            .format(scale))
-            # prevents infinite recursion because of setItem
-            self.header_table.blockSignals(True)
-            self.header_table.setItem(1, col, QTableWidgetItem(str(s.scale)))
-            self.header_table.blockSignals(False)
-
-    def update_unit_combo(self):
-        dm = self.parent
-        ui = dm.parent
-        group = dm.all_groups[self.select_group.currentText()]
-        type_combo = QObject.sender(self)
-        col = type_combo.property("col")
-        unit_type = type_combo.currentText()
-        header = self.header_table.item(2, col).text()
-        s = group.series(header)
-        s.unit_type = unit_type
-        unit_combo = self.header_table.cellWidget(5, col)
-        unit_combo.clear()
-        if unit_type in ui.user_units:
-            unit_combo.addItems(list(ui.user_units[unit_type]))
-        elif unit_type in ui.unit_dict:
-            unit_combo.addItems(list(ui.unit_dict[unit_type]))
-        elif ui.default_unit:
-            unit_combo.addItem(ui.default_unit)
-        dm.modified = True
-
-    def update_series_unit(self):
-        dm = self.parent
-        group = dm.all_groups[self.select_group.currentText()]
-        unit_combo = QObject.sender(self)
-        col = unit_combo.property("col")
-        unit = unit_combo.currentText()
-        header = self.header_table.item(2, col).text()
-        s = group.series(header)
-        s.unit = unit
-        dm.modified = True
-
-    def update_keep(self):
-        dm = self.parent
-        group = dm.all_groups[self.select_group.currentText()]
-        keep_check = QObject.sender(self)
-        selected = self.header_table.selectedItems()
-        columns = [keep_check.property("col")]
-        columns.extend([item.column() for item in selected])
-        for c in set(columns):
-            header = self.header_table.item(2, c).text()
-            s = group.series(header)
-            s.keep = keep_check.isChecked()
-        self.display_header_info()
-        dm.modified = True
-
-    def open_settings(self):
-        self.dlg = UnitSettings(self)
-        self.dlg.setModal(True)
-        self.dlg.show()
+        gt = dm.groups_tab
+        selected = self.header_table.selectedIndexes()
+        cols = set([index.column() for index in selected])
+        series = [self.stacks[col].s for col in cols]
+        report = gt.parse_series(series)
+        self.header_table.blockSignals(True)
+        self.populate_header_table()
+        self.header_table.blockSignals(False)
+        gt.report_parse_error_log(report)

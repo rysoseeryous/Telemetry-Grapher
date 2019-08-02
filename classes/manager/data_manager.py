@@ -21,9 +21,10 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import re
 from copy import copy, deepcopy
 
-from PyQt5.QtWidgets import (QApplication, QDialog, QMessageBox, QWidget,
+from PyQt5.QtWidgets import (QDialog, QMessageBox, QWidget,
                              QDialogButtonBox, QVBoxLayout, QSplitter,
                              QTabWidget, QTextEdit, QLabel)
 from PyQt5.QtGui import QIcon
@@ -31,6 +32,7 @@ from PyQt5.QtCore import Qt
 
 from .groups_tab import GroupsTab
 from .configure_tab import ConfigureTab
+from .units_tab import UnitsTab
 from ..internal.contents_dict import ContentsDict
 
 class DataManager(QDialog):
@@ -47,10 +49,13 @@ class DataManager(QDialog):
         self.all_groups = deepcopy(ui.all_groups)
         self.group_rename = {name:[name] for name in self.all_groups}
         self.fig_groups = {}
-#        self.group_rename = {}
+        self.unit_clarify = copy(ui.unit_clarify)
+        self.user_units = deepcopy(ui.user_units)
+        self.base_units = deepcopy(ui.base_units)
+        self.default_unit_type = deepcopy(ui.default_unit_type)
+        self.default_unit = deepcopy(ui.default_unit)
         for cf in ui.all_figures():
             self.fig_groups[cf.title] = copy(cf.groups)
-#            self.group_rename[cf.title] = {name:[name] for name in cf.groups}
         self.modified = False
         self.resize(1000, 500)
         splitter = QSplitter(Qt.Vertical)
@@ -58,8 +63,10 @@ class DataManager(QDialog):
         self.tab_base = QTabWidget()
         self.groups_tab = GroupsTab(self)
         self.configure_tab = ConfigureTab(self)
+        self.units_tab = UnitsTab(self)
         self.tab_base.addTab(self.groups_tab, 'File Grouping')
         self.tab_base.addTab(self.configure_tab, 'Series Configuration')
+        self.tab_base.addTab(self.units_tab, 'Unit Settings')
         splitter.addWidget(self.tab_base)
 
         self.log_base = QWidget()
@@ -86,6 +93,71 @@ class DataManager(QDialog):
         if self.debug:
             self.groups_tab.import_group() #!!! Delete Later
             self.save_changes()
+
+    def get_default_unit_type(self):
+        return self.default_unit_type
+
+    def get_default_unit(self):
+        return self.default_unit
+
+    def unit_combos(self):
+        ut = self.units_tab
+        ct = self.configure_tab
+        combos = [ut.default_unit_combo]
+        combos.extend([stack.unit_combo for stack in ct.stacks])
+        combos.extend(ut.clarified_table.combos())
+        return combos
+
+    def type_combos(self):
+        ut = self.units_tab
+        ct = self.configure_tab
+        combos = [ut.default_type_combo]
+        combos.extend([stack.type_combo for stack in ct.stacks])
+        return combos
+
+    def parse_unit(self, header):
+        """Parses unit information from header.
+        Returns characters between last instance of square brackets."""
+        # matches any characters between square brackets
+        regex = re.compile('\[[^\[]*?\]')
+        parsed = ''
+        for match in re.finditer(regex, header):  # as last match
+            parsed = match.group(0)[1:-1]  # strip brackets
+        return parsed
+
+    def interpret_unit(self, unit):
+        """Tries to interpret unit.
+        - Run unit through self.unit_clarify dictionary.
+        - Check if unit can be associated with a unit type.
+        - If so, return unit, otherwise return default unit.
+        - Boolean indicates whether or not the unit was interpretable."""
+        if unit:
+            if unit in self.unit_clarify:
+                unit = self.unit_clarify[unit]
+            unit_type = self.get_unit_type(unit)
+        else:
+            unit = self.default_unit
+            unit_type = self.default_unit_type
+        return unit, unit_type, bool(unit and unit_type)
+
+    def get_unit_type(self, unit):
+        """Returns unit type of given unit.
+        Priority is first given to user-defined units, then base unit types.
+        If unit is not recognized in either dictionary,
+        then the default unit type is returned."""
+        # check user units first
+        for unit_type in self.user_units:
+            if unit in self.user_units[unit_type]:
+                return unit_type
+        # if not found, check hard-coded base_units
+        for unit_type in self.base_units:
+            if unit in self.base_units[unit_type]:
+                return unit_type
+        # else, return default unit type
+        return self.default_unit_type
+
+    def all_units(self):
+        return {**self.user_units, **self.base_units}
 
     def keyPressEvent(self, event):
         """Close dialog from escape key."""
@@ -120,6 +192,12 @@ class DataManager(QDialog):
         ui = self.parent
         sd = ui.series_display
         fs = ui.figure_settings
+
+        ui.unit_clarify = self.unit_clarify
+        ui.user_units = self.user_units
+        ui.base_units = self.base_units
+        ui.default_unit_type = self.default_unit_type
+        ui.default_unit = self.default_unit
 
         header_ref = deepcopy(ui.all_groups)
         ui.all_groups = self.all_groups
@@ -190,5 +268,4 @@ class DataManager(QDialog):
                 return
             elif choice == QMessageBox.Save:
                 self.save_changes()
-#        QApplication.clipboard().clear()
         event.accept()

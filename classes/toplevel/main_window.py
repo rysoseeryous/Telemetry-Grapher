@@ -22,17 +22,16 @@ __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
 import os
-import re
 import json
 import datetime as dt
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow, QTabWidget,
                              QMessageBox, QTabBar)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
-from .axes_frame import AxesFrame
 from .series_display import SeriesDisplay
 from .figure_settings import FigureSettings
 from .file_menu import FileMenu
@@ -44,7 +43,6 @@ from .legend_toolbar import LegendToolbar
 from .axes_toolbar import AxesToolbar
 
 from ..internal.contents_dict import ContentsDict
-#from ..internal.bunch import Bunch
 from ..internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
@@ -53,8 +51,6 @@ class UI(QMainWindow):
     def __init__(self, logger):
         super().__init__()
         self.logger = logger
-        self.logger.info(' Application opened at {}'
-                         .format(dt.datetime.now()))
         self.fig_dir = os.getcwd()
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
@@ -74,20 +70,12 @@ class UI(QMainWindow):
         self.light_qss, self.dark_qss = stylesheets
 
         # Read settings from config file
-        with open('config.json', 'r', encoding='utf-8') as f:
+        with open('config.json', 'r', encoding='utf-8-sig') as f:
             self.config = json.load(f)
-        self.unit_dict = self.config['unit_dict']
-        self.unit_clarify = self.config['unit_clarify']
-        self.user_units = self.config['user_units']
-        self.default_type = self.config['default_type']
-        self.default_unit = self.config['default_unit']
-        self.light_rcs = self.config['light_rcs']
-        self.dark_rcs = self.config['dark_rcs']
-        self.mode = self.config['start_mode']
-        obj = self.config['highlight']
-        self.highlight = {True: obj['True'], False: obj['False']}
-        self.af_init = self.config['af_init']
-        self.csv_dir = self.config['csv_dir']
+        for k,v in self.config.items():
+            setattr(self, k, deepcopy(v))
+        self.highlight = {True: self.highlight['True'],
+                          False: self.highlight['False']}
 
         if self.mode == 'light':
             self.current_qss = self.light_qss
@@ -98,59 +86,9 @@ class UI(QMainWindow):
             self.current_rcs = self.dark_rcs
             self.current_icon_path = 'rc/entypo/dark'
 
-        # For displaying subplot legends
-        self.locations = {
-            'Outside Right': 'center left',
-            'Outside Top': 'lower center',
-            'Upper Left': 'upper left',
-            'Upper Center': 'upper center',
-            'Upper Right': 'upper right',
-            'Center Left': 'center left',
-            'Center Right': 'center right',
-            'Lower Left': 'lower left',
-            'Lower Center': 'lower center',
-            'Lower Right': 'lower right',
-            }
-
         self.setWindowTitle('Telemetry Plot Configurator')
         self.setWindowIcon(QIcon('rc/satellite.png'))
         self.statusBar().showMessage('No subplot selected')
-
-        self.tab_base = QTabWidget()
-        self.tab_bar = EditableTabBar(self)
-        self.tab_base.setTabBar(self.tab_bar)
-        cf = AxesFrame(self)
-        self.tab_base.addTab(cf, cf.title)
-        self.tab_base.addTab(QWidget(), '+')
-        self.tab_base.tabBar().setStyleSheet("""
-                            QTabBar::tab:last
-                            {
-                                width: 6ex;
-                                min-width: 6ex;
-                                height: 6ex;
-                            }
-                            """)
-        self.tab_base.setTabsClosable(True)
-        self.tab_base.tabCloseRequested.connect(self.close_tab)
-        self.tab_base.tabBar().tabButton(1, QTabBar.RightSide).resize(0,0)
-        self.tab_base.tabBar().setSelectionBehaviorOnRemove(
-                QTabBar.SelectPreviousTab)
-        self.tab_base.setTabPosition(QTabWidget.South)
-        self.tab_base.setStyleSheet("""
-                            QTabWidget::tab-bar
-                            {
-                                alignment: left;
-                            }
-                            """)
-        self.setCentralWidget(self.tab_base)
-
-        self.series_display = SeriesDisplay(self, "Series Display")
-        self.figure_settings = FigureSettings(self, "Figure Settings")
-        self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
-                                             Qt.LeftDockWidgetArea)
-
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
 
         self.file_menu = FileMenu('File', self)
         self.edit_menu = EditMenu('Edit', self)
@@ -168,22 +106,59 @@ class UI(QMainWindow):
         self.addToolBar(self.legend_toolbar)
         self.addToolBar(self.axes_toolbar)
 
-        self.figure_settings.update_fields(cf)
+        self.tab_base = QTabWidget()
+        self.tab_bar = EditableTabBar(self)
+        self.tab_base.setTabBar(self.tab_bar)
+        self.tab_base.addTab(QWidget(), '+')
+        self.tab_base.tabBar().setStyleSheet("""
+                            QTabBar::tab:last
+                            {
+                                width: 6ex;
+                                min-width: 6ex;
+                                height: 6ex;
+                            }
+                            """)
+        self.tab_base.setTabsClosable(True)
+        self.tab_base.tabCloseRequested.connect(self.close_tab)
+        self.tab_base.currentChanged.connect(self.update_dock_widgets)
+        self.tab_base.tabBar().tabButton(0, QTabBar.RightSide).resize(0,0)
+        self.tab_base.tabBar().setSelectionBehaviorOnRemove(
+                QTabBar.SelectPreviousTab)
+        self.tab_base.setTabPosition(QTabWidget.South)
+        self.tab_base.setStyleSheet("""
+                            QTabWidget::tab-bar
+                            {
+                                alignment: left;
+                            }
+                            """)
+        self.setCentralWidget(self.tab_base)
+
         self.set_app_style(self.current_qss,
                            self.current_rcs,
                            self.current_icon_path)
-        cf.saved = True
-        self.tab_base.currentChanged.connect(self.update_dock_widgets)
-        self.showMaximized()
 
+        self.series_display = SeriesDisplay(self, "Series Display")
+        self.figure_settings = FigureSettings(self, "Figure Settings")
+        self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
+                                             Qt.LeftDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
         self.resizeDocks([self.series_display, self.figure_settings],
                          [420, 165],
                          Qt.Horizontal)
+
+        self.file_menu.new()
+        cf = self.get_current_figure()
+        self.figure_settings.update_fields(cf)
+        cf.saved = True
+
+        self.showMaximized()
+
         #!!! because for some reason it resizes this qcombobox??
         self.legend_toolbar.legend_location.setMinimumWidth(100)
         self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
-#        self.open_data_manager()
+        self.tools_menu.open_data_manager()
 
     def get_current_figure(self):
         return self.tab_base.currentWidget()
@@ -241,6 +216,9 @@ class UI(QMainWindow):
         self.dlg = prompt
         return self.dlg.exec_()
 
+    def all_units(self):
+        return {**self.user_units, **self.base_units}
+
     def groups_to_contents(self, groups):
         """Converts groups database into contents format. See ReadMe."""
         contents = ContentsDict()
@@ -255,44 +233,12 @@ class UI(QMainWindow):
             contents.update({group_name: aliases})
         return contents
 
-    def parse_unit(self, header):
-        """Parses unit information from header.
-        Returns characters between last instance of square brackets."""
-        # matches any characters between square brackets
-        regex = re.compile('\[[^\[]*?\]')
-        parsed = ''
-        for match in re.finditer(regex, header):  # as last match
-            parsed = match.group(0)[1:-1]  # strip brackets
-        return parsed
-
-    def interpret_unit(self, unit):
-        """Tries to interpret unit.
-        - Run unit through self.unit_clarify dictionary.
-        - Check if unit can be associated with a unit type.
-        - If so, return unit, otherwise return default unit.
-        - Boolean indicates whether or not the unit could be interpreted."""
-        if unit:
-            if unit in self.unit_clarify:
-                unit = self.unit_clarify[unit]
-            if self.get_unit_type(unit) != self.default_type:
-                return unit, True
-        return self.default_unit, False
-
-    def get_unit_type(self, unit):
-        """Returns unit type of given unit.
-        Priority is first given to user-defined units, then base unit types.
-        If unit is not recognized in either dictionary,
-        then the default unit type is returned."""
-        # check user units first
-        for e in self.user_units:
-            if unit in self.user_units[e]:
-                return e
-        # if not found, check hard-coded unit_dict
-        for e in self.unit_dict:
-            if unit in self.unit_dict[e]:
-                return e
-        # else, return default type
-        return self.default_type
+    def make_widget_deselectable(self, widget):
+        def focusOutEvent(event, self=widget):
+            widget.clearSelection()
+            widget.clearFocus()
+            type(widget).focusOutEvent(widget, event)
+        widget.focusOutEvent = focusOutEvent
 
     def set_app_style(self, qss, mpl_rcs, icon_path):
         app = QApplication.instance()
@@ -376,6 +322,17 @@ class UI(QMainWindow):
             if self.tab_base.currentIndex() == self.nfigs():
                 self.tab_base.setCurrentIndex(i-1)
 
+    def overwrite_config(self):
+        self.config['unit_clarify'] = self.unit_clarify
+        self.config['base_units'] = self.base_units
+        self.config['user_units'] = self.user_units
+        self.config['default_unit_type'] = self.default_unit_type
+        self.config['default_unit'] = self.default_unit
+        self.config['mode'] = self.mode
+        self.config['csv_dir'] = self.csv_dir
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, indent=2, ensure_ascii=False)
+
     def closeEvent(self, event):
         """Called when application is about to exit.
         If close event accepted,
@@ -400,12 +357,8 @@ class UI(QMainWindow):
         if event.isAccepted():
             for dock in [self.series_display, self.figure_settings]:
                 if dock.isFloating(): dock.close()
-
-            self.config['start_mode'] = self.mode
-            self.config['csv_dir'] = self.csv_dir
-            with open('config.json', 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, indent=2, ensure_ascii=False)
-
+            self.overwrite_config()
             plt.close('all')
-            self.logger.info(' Application closed at {}\n'
-                             .format(dt.datetime.now()))
+            if self.logger.any:
+                self.logger.info(' Application CLOSED at {}\n'
+                                 .format(dt.datetime.now()))

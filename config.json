@@ -1,11 +1,12 @@
 {
-  "unit_dict": {
+  "base_units": {
     "Position": [
       "nm",
       "μm",
       "mm",
       "cm",
-      "m"
+      "m",
+      "km"
     ],
     "Velocity": [
       "mm/s",
@@ -83,7 +84,7 @@
     "F": "°F"
   },
   "user_units": {},
-  "default_type": "",
+  "default_unit_type": "",
   "default_unit": "",
   "light_rcs": {
     "patch.edgecolor": "k",
@@ -115,14 +116,14 @@
     "savefig.edgecolor": "#31363b",
     "font.family": "serif"
   },
-  "start_mode": "light",
+  "mode": "light",
   "highlight": {
     "True": 1.5,
     "False": 0.5
   },
   "af_init": {
     "tsf": "%b %d, %H:%M",
-    "title": "New_Figure",
+    "title": "Untitled",
     "upper_pad": 0.07,
     "lower_pad": 0.08,
     "left_pad": 0.05,
@@ -141,5 +142,17 @@
     "tick_size": 10,
     "tick_rot": 45
   },
-  "csv_dir": "./tests"
+  "csv_dir": "./tests",
+  "locations": {
+    "Outside Right": "center left",
+    "Outside Top": "lower center",
+    "Upper Left": "upper left",
+    "Upper Center": "upper center",
+    "Upper Right": "upper right",
+    "Center Left": "center left",
+    "Center Right": "center right",
+    "Lower Left": "lower left",
+    "Lower Center": "lower center",
+    "Lower Right": "lower right"
+  }
 }

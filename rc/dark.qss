@@ -321,6 +321,11 @@ QWidget:disabled
     background-color: #31363b;
 }
 
+QTableView:disabled
+{
+    color: #eff0f1
+}
+
 QAbstractItemView
 {
     alternate-background-color: #31363b;

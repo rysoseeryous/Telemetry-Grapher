@@ -385,15 +385,12 @@ class FigureSettings(QDockWidget):
     def update_unit_table(self):
         """Updates table associating unit types with colors."""
         ui = self.parent
-        all_units = {**ui.unit_dict, **ui.user_units}
-        self.unit_table.setRowCount(len(all_units))
-        for i, unit_type in enumerate(all_units):
+        self.unit_table.setRowCount(len(ui.all_units()))
+        for i, unit_type in enumerate(ui.all_units()):
             if unit_type not in self.color_dict:
                 self.color_dict.update({unit_type:'C'+str(i%10)})
-        for i, unit_type in enumerate(all_units):
             color = QColor(mcolors.to_hex(self.color_dict[unit_type]))
             self.dlg.setCustomColor(i, color)
-        for i, unit_type in enumerate(all_units):
             item = QTableWidgetItem(unit_type)
             item.setFlags(Qt.ItemIsSelectable)
             self.unit_table.setItem(i, 0, item)

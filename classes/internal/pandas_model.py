@@ -30,7 +30,12 @@ class PandasModel(QStandardItemModel):
         QStandardItemModel.__init__(self, parent)
         self._data = data
         for row in data.values.tolist():
-            data_row = [QStandardItem(str(x)) for x in row]
+            data_row = []
+            for x in row:
+                try:
+                    data_row.append(QStandardItem("{:.3f}".format(x)))
+                except ValueError:
+                    data_row.append(QStandardItem(x))
             self.appendRow(data_row)
         return
 

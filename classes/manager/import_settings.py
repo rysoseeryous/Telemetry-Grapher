@@ -116,6 +116,7 @@ class ImportSettings(QDialog):
             self.update_row_kwargs(i, kwargs)
         self.kwargTable.setCurrentCell(0, 1)
 
+        self.ok_button.setFocus()
         if self.parent.parent.debug:
             self.accept()
 

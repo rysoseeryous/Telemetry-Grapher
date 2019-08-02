@@ -36,6 +36,8 @@ from classes.toplevel.main_window import UI
 # Allows logging of unhandled exceptions
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='errors.log', filemode='w', level=logging.DEBUG)
+logger.start = dt.datetime.now()
+logger.any = False
 
 def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
     """Handler for unhandled exceptions that will write to the logs"""
@@ -44,9 +46,11 @@ def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
         # call the default excepthook saved at __excepthook__
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-#    logger.basicConfig(format='%(asctime)s %(message)s')
-    logger.critical('Unhandled exception at {}'.format(dt.datetime.now()),
+    if not logger.any:
+        logger.info(' Application OPENED at {}'.format(logger.start))
+    logger.critical(' Unhandled exception at {}'.format(dt.datetime.now()),
                     exc_info=(exc_type, exc_value, exc_traceback))
+    logger.any = True
 
 sys.excepthook = handle_unhandled_exception
 

@@ -82,14 +82,6 @@ class AxesFrame(FigCanvas):
         self.minor_locator = mdates.HourLocator(interval=12)
         self.draw()
 
-#    @property
-#    def title(self):
-#        return self.title
-#
-#    @title.setter
-#    def title(self, value):
-#        self.title = value
-
     def weights(self):
         return self.gs.get_height_ratios()
 
@@ -320,5 +312,3 @@ class AxesFrame(FigCanvas):
         self.density = 100
         self.replot()
         self.draw()
-
-

@@ -23,20 +23,20 @@ __license__ = "GNU General Public License"
 
 import os
 import re
+import math
 import datetime as dt
 import pandas as pd
 import numpy as np
 
-from PyQt5.QtWidgets import (QWidget, QFileDialog,
-                             QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QPushButton, QLabel, QLineEdit, QListWidget,
-                             QComboBox)
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QHeaderView,
+                             QGridLayout, QHBoxLayout, QVBoxLayout, QFrame,
+                             QPushButton, QLabel, QLineEdit, QComboBox,
+                             QTableView, QListWidget, QListWidgetItem)
+from PyQt5.QtGui import QIcon, QStandardItemModel, QStandardItem
+from PyQt5.QtCore import Qt, QFileInfo
 
 from .import_settings import ImportSettings
 from ..internal.group import Group
-from ..internal.edit_group import EditGroup
 
 class GroupsTab(QWidget):
     """UI for organizing source files into groups."""
@@ -53,7 +53,7 @@ class GroupsTab(QWidget):
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
         self.browse = QPushButton()
-        self.browse.setIcon(QIcon(dm.parent.current_icon_path+'/browse'))
+        self.browse.setIcon(QIcon(dm.parent.current_icon_path+'/browse.png'))
         self.browse.clicked.connect(self.browse_dialog)
         hbox.addWidget(self.browse)
         self.directory = QLineEdit(ui.csv_dir)
@@ -69,6 +69,17 @@ class GroupsTab(QWidget):
         self.file_search.setFocus(True)
         grid.addWidget(self.file_search, 0, 0)
 
+        grid.addWidget(QLabel('Found Files'), 1, 0)
+
+        self.found_files = QTableView()
+        self.found_files.setSortingEnabled(True)
+        self.files_model = QStandardItemModel()
+        self.found_files.setModel(self.files_model)
+        ui.make_widget_deselectable(self.found_files)
+        self.found_files.setDragEnabled(True)
+        self.found_files.setSelectionBehavior(QTableView.SelectRows)
+        grid.addWidget(self.found_files, 2, 0)
+
         self.group_name = QLineEdit()
         if self.parent.debug:
             self.group_name.setText('Debug')  # delete initial text later #!!!
@@ -76,10 +87,41 @@ class GroupsTab(QWidget):
         self.group_name.returnPressed.connect(self.import_group)
         grid.addWidget(self.group_name, 0, 1)
 
+        grid.addWidget(QLabel('Files in Group'), 1, 1)
+
+        self.group_files = QListWidget()
+        ui.make_widget_deselectable(self.group_files)
+        self.group_files.setAcceptDrops(True)
+        self.group_files.dropEvent = self.group_files_drop_event
+        self.group_files.dragEnterEvent = self.group_files_drag_event
+        self.group_files.setSelectionMode(QListWidget.ExtendedSelection)
+        self.group_files.keyPressEvent = self.delete_group_file
+        if self.parent.debug:
+            self.group_files.addItem('Test.csv') #!!! Delete later
+        grid.addWidget(self.group_files, 2, 1)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        grid.addWidget(line, 0, 2, 3, 1)
+
         self.import_button = QPushButton('Import Group')
         self.import_button.clicked.connect(self.import_group)
         self.import_button.setDefault(True)
-        grid.addWidget(self.import_button, 0, 2)
+        grid.addWidget(self.import_button, 0, 3)
+
+        grid.addWidget(QLabel('Imported Groups'), 1, 3)
+
+        self.imported_groups = QListWidget()
+        ui.make_widget_deselectable(self.imported_groups)
+        self.imported_groups.setDragEnabled(True)
+        for group_name in dm.all_groups.keys():
+            item = QListWidgetItem(group_name)
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
+            self.imported_groups.addItem(item)
+        self.imported_groups.itemChanged.connect(self.edit_group_name)
+        self.imported_groups.keyPressEvent = self.delete_imported_group
+        grid.addWidget(self.imported_groups, 2, 3)
 
         self.figure_selector = QComboBox()
         self.figure_selector.addItems(ui.open_figure_titles())
@@ -87,61 +129,22 @@ class GroupsTab(QWidget):
         self.figure_selector.setCurrentText(cf.title)
         self.figure_selector.currentTextChanged.connect(
                 self.update_figure_groups)
-        grid.addWidget(self.figure_selector, 0, 3)
+        grid.addWidget(self.figure_selector, 0, 4)
 
-        grid.addWidget(QLabel('Found Files'), 1, 0)
-
-        grid.addWidget(QLabel('Files in Group'), 1, 1)
-
-        grid.addWidget(QLabel('Imported Groups'), 1, 2)
-
-        grid.addWidget(QLabel('Figure Groups'), 1, 3)
-
-        self.found_files = QListWidget()
-        self.found_files.setSelectionMode(QListWidget.ExtendedSelection)
-        grid.addWidget(self.found_files, 2, 0)
-
-        self.group_files = QListWidget()
-        self.group_files.setSelectionMode(QListWidget.ExtendedSelection)
-        if self.parent.debug:
-            self.group_files.addItem('Test.csv') #!!! Delete later
-        grid.addWidget(self.group_files, 2, 1)
-
-        self.imported_groups = QListWidget()
-        self.imported_groups.addItems(dm.all_groups.keys())
-#        for title in dm.all_groups:
-#            for group_name in dm.all_groups[title].keys():
-#                w = self.imported_groups
-#                loaded_groups = [w.item(i).text() for i in range(w.count())]
-#                if group_name not in loaded_groups:
-#                    self.imported_groups.addItem(group_name)
-        self.imported_groups.itemDoubleClicked.connect(self.edit_group)
-        grid.addWidget(self.imported_groups, 2, 2)
+        grid.addWidget(QLabel('Figure Groups'), 1, 4)
 
         self.figure_groups = QListWidget()
+        ui.make_widget_deselectable(self.figure_groups)
+        self.figure_groups.setAcceptDrops(True)
+        self.figure_groups.dropEvent = self.figure_groups_drop_event
+        self.figure_groups.dragEnterEvent = self.figure_groups_drag_event
         self.figure_groups.addItems(dm.fig_groups[cf.title])
-        grid.addWidget(self.figure_groups, 2, 3)
+        self.figure_groups.keyPressEvent = self.delete_figure_group
+        grid.addWidget(self.figure_groups, 2, 4)
 
-        self.add_file = QPushButton('Add File to Group')
-        self.add_file.clicked.connect(self.transfer_list_item)
-        grid.addWidget(self.add_file, 3, 0)
-
-        self.remove_file = QPushButton('Remove File from Group')
-        self.remove_file.clicked.connect(self.transfer_list_item)
-        grid.addWidget(self.remove_file, 3, 1)
-
-        self.add_group = QPushButton('Add Group to Figure')
-        self.add_group.clicked.connect(self.transfer_list_item)
-        grid.addWidget(self.add_group, 3, 2)
-
-        self.remove_group = QPushButton('Remove Group from Figure')
-        self.remove_group.clicked.connect(self.transfer_list_item)
-        grid.addWidget(self.remove_group, 3, 3)
-
-#        self.delete = QPushButton('Delete Group')
-#        self.delete.clicked.connect(self.delete_group)
-#        grid.addWidget(self.delete, 3, 2)
-
+        factors = [2, 1, 1, 1, 1]
+        for c, f in enumerate(factors):
+            grid.setColumnStretch(c, f)
         vbox.addLayout(grid)
         self.setLayout(vbox)
 
@@ -156,6 +159,33 @@ class GroupsTab(QWidget):
             self.directory.setText(path)
             self.search_dir()
 
+    def format_file_size(self, file_size):
+        # I think this doesn't quite work properly... #!!!
+        if file_size:
+            n = np.clip(int(math.log(file_size, 1000)), 0, 3)
+        else:
+            n = 0
+        suffix = ['bytes', 'KB', 'MB', 'GB']
+        return str(int(file_size/(1000*n))) + ' ' + suffix[n]
+
+    def populate_found_files(self, files):
+        self.files_model.clear()
+        labels = ['File Name', 'Size', 'Modified']
+        self.files_model.setHorizontalHeaderLabels(labels)
+        v_header = self.found_files.verticalHeader()
+        v_header.setDefaultSectionSize(v_header.minimumSectionSize())
+        v_header.hide()
+        h_header = self.found_files.horizontalHeader()
+        h_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        h_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        h_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        for f in files:
+            name = QStandardItem(f.fileName())
+            size = QStandardItem(self.format_file_size(f.size()))
+            date = f.lastModified().toPyDateTime()
+            modified = QStandardItem(date.strftime('%d-%b-%y %H:%M'))
+            self.files_model.appendRow([name, size, modified])
+
     def search_dir(self):
         """Searches current directory and displays found files.
         Newly found files are given an entry with default values in a
@@ -165,74 +195,74 @@ class GroupsTab(QWidget):
         path = self.directory.text()
         ui.csv_dir = path
         try:
-            self.loaded_files, new_path_dict_entries = self.gather_files(path)
+            self.files, new_path_dict_entries = self.gather_files(path)
+        except FileNotFoundError:
+            dm.feedback('{} is not a valid path.'.format(path))
+        else:
             self.path_dict.update(new_path_dict_entries)
             self.file_search.setText('')
-            self.found_files.clear()
-            self.found_files.addItems(self.loaded_files)
-        except FileNotFoundError:
-            dm = self.parent
-            dm.feedback('{} is not a valid path.'.format(path))
+            self.populate_found_files(self.files)
 
     def gather_files(self, path):
         """Returns list of csv file names in directory path.
         Excludes temporary files.
         Does not search subfolders.
         Also returns dictionary associating files to their source paths."""
-        found_files = []
+        files = []
         path_dict = {}
         filetypes = re.compile(r'(csv|zip)$')
         exclude = re.compile(r'^~\$')
         for file in os.listdir(path):
             if re.search(filetypes, file) and not re.search(exclude, file):
-                found_files.append(file)
-                path_dict[file] = os.path.join(path, file)
-        return found_files, path_dict
+                file_path = os.path.join(path, file)
+                files.append(QFileInfo(file_path))
+                path_dict[file] = file_path
+        return files, path_dict
 
-    def filter_files(self):
+    def filter_files(self, text):
         """Displays files in found files list which match searchbar input."""
+        pattern = re.compile(text, re.IGNORECASE)
+        matches = [f for f in self.files
+                   if re.search(pattern, os.path.splitext(f.fileName())[0])]
+        self.populate_found_files(matches)
+
+    def group_files_drag_event(self, event):
+        if event.source() is self.found_files:
+            event.accept()
+        else:
+            event.ignore()
+
+    def figure_groups_drag_event(self, event):
+        if event.source() is self.imported_groups:
+            event.accept()
+        else:
+            event.ignore()
+
+    def group_files_drop_event(self, event):
         dm = self.parent
-        pattern = re.compile(self.file_search.text(), re.IGNORECASE)
-        matches = [item for item in dm.groups_tab.loaded_files
-                   if re.search(pattern,item)]
-        self.found_files.clear()
-        self.found_files.addItems(matches)
+        w = self.group_files
+        selected = self.found_files.selectedIndexes()
+        for row in set([index.row() for index in selected]):
+            file_name = self.found_files.model().item(row, 0).text()
+            if file_name in [w.item(i).text() for i in range(w.count())]:
+                dm.feedback('"{}" already added to group.'.format(file_name))
+            else:
+                w.addItem(file_name)
+        event.ignore()
 
-    def transfer_list_item(self):
-        """Transfers file to or from group file list."""
+    def figure_groups_drop_event(self, event):
         dm = self.parent
-        if QObject.sender(self) == self.add_file:
-            for item in self.found_files.selectedItems():
-                w = self.group_files
-                if item.text() in [w.item(i).text() for i in range(w.count())]:
-                    dm.feedback('{} already added'.format(item.text()))
-                else:
-                    w.addItem(item.text())
-
-        if QObject.sender(self) == self.remove_file:
-            for item in self.group_files.selectedItems():
-                self.group_files.takeItem(self.group_files.row(item))
-
-        if QObject.sender(self) == self.add_group:
-            cf_title = self.figure_selector.currentText()
-            for item in self.imported_groups.selectedItems():
-                w = self.figure_groups
-                if item.text() in [w.item(i).text() for i in range(w.count())]:
-                    dm.feedback('{} already in figure'.format(item.text()))
-                else:
-                    name = item.text()
-                    w.addItem(name)
-                    dm.fig_groups[cf_title].append(name)
-                    dm.group_rename.update({name:[name]})
-                    dm.modified = True
-
-        if QObject.sender(self) == self.remove_group:
-            cf_title = self.figure_selector.currentText()
-            for item in self.figure_groups.selectedItems():
-                self.figure_groups.takeItem(self.figure_groups.row(item))
-                dm.fig_groups[cf_title].remove(item.text())
-                del dm.group_rename[item.text()]
-                dm.modified = True
+        cf_title = self.figure_selector.currentText()
+        name = self.imported_groups.currentItem().text()
+        w = self.figure_groups
+        if name in [w.item(i).text() for i in range(w.count())]:
+            dm.feedback('"{}" already in figure "{}".'.format(name, cf_title))
+        else:
+            w.addItem(name)
+            dm.fig_groups[cf_title].append(name)
+            dm.group_rename.update({name:[name]})
+            dm.modified = True
+        event.ignore()
 
     def review_import_settings(self, source_files):
         dm = self.parent
@@ -321,7 +351,7 @@ class GroupsTab(QWidget):
     def import_group(self):
         dm = self.parent
         ui = dm.parent
-        group_name = self.group_name.text()
+        group_name = self.group_name.text().strip()
         w = self.imported_groups
         loaded_groups = [w.item(i).text() for i in range(w.count())]
 
@@ -330,15 +360,13 @@ class GroupsTab(QWidget):
             dm.feedback('Group name cannot be empty.')
             return
         elif group_name in loaded_groups:
-            ok = ui.popup('Group "{}" already exists. Overwrite?'
+            result = ui.popup('Group "{}" already exists. Overwrite?'
                           .format(group_name),
                           title='Import Group',
                           mode='confirm')
-            if ok:
-                self.imported_groups.takeItem(loaded_groups.index(group_name))
-        #??? What if group_name is a rename of a previously loaded group?
-            else:
+            if result != QMessageBox.Ok:
                 return
+
         w = self.group_files
         #read groupfiles listview
         source_files = [w.item(i).text() for i in range(w.count())]
@@ -359,17 +387,20 @@ class GroupsTab(QWidget):
                 title = self.figure_selector.currentText()
                 group = Group(df, group_name)
                 dm.all_groups[group_name] = group
-                dm.fig_groups[title].append(group_name)
+                if group_name not in loaded_groups:
+                    item = QListWidgetItem(group_name)
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    dm.fig_groups[title].append(group_name)
+                    self.imported_groups.addItem(item)
+                    self.figure_groups.addItem(group_name)
                 dm.group_rename.update({group_name:[group_name]})
-                self.imported_groups.addItem(group_name)
-                self.figure_groups.addItem(group_name)
-
                 # Try to auto parse units
                 if ui.auto_parse:
                     report = self.parse_series(group.series())
                     self.report_parse_error_log(report)
 # -> this emits a signal to call CT's display_header_info function
                 dm.configure_tab.select_group.addItem(group_name)
+                dm.configure_tab.select_group.setCurrentText(group_name)
                 self.group_files.clear()
                 self.group_name.setText('')
                 dm.modified = True
@@ -458,32 +489,31 @@ class GroupsTab(QWidget):
 
     def parse_series(self, series):
         dm = self.parent
-        ui = dm.parent
         report = ''
         for s in series:
             header = s.header
-            parsed = ui.parse_unit(header)
-            unit, interpreted = ui.interpret_unit(parsed)
+            parsed = dm.parse_unit(header)
+            unit, unit_type, interpreted = dm.interpret_unit(parsed)
             s.unit = unit
-            s.unit_type = ui.get_unit_type(unit)
+            s.unit_type = unit_type
             if not interpreted:
                 report += header + '\n'
             else:
                 alias = re.sub('\[{}\]'.format(parsed), '', header).strip()
                 s.alias = alias
-                s.parent.alias_dict[alias] = header
+                s.group.alias_dict[alias] = header
         return report
 
     def report_parse_error_log(self, report):
         dm = self.parent
         ui = dm.parent
         if report:
-            ui.popup('Some units not assigned.',
+            ui.popup('Some units and/or unit types not assigned.',
                      title='Unit Parse Error Log',
-                     informative=('You can assign units manually'
-                                  'under Series Configuration,'
-                                  'leave them blank, or '
-                                  'adjust unit settings and reparse.'),
+                     informative=('You can assign units and unit types '
+                                  'manually under Series Configuration, '
+                                  'leave them blank, or adjust unit settings '
+                                  'and reparse.'),
                      details=report,
                      mode='alert')
 
@@ -492,47 +522,56 @@ class GroupsTab(QWidget):
         self.figure_groups.clear()
         self.figure_groups.addItems(dm.fig_groups[text])
 
-    def edit_group(self, item):
-        """Renames or deletes imported group.
+    def delete_group_file(self, event):
+        if event.key() == Qt.Key_Delete:
+            for item in self.group_files.selectedItems():
+                self.group_files.takeItem(self.group_files.row(item))
+
+    def edit_group_name(self, item):
+        """Renames or imported group.
         Keeps track of past renaming operations so Data Manager's save changes
         can identify existing groups as having been renamed.
         Accessible by double clicking on an imported group."""
         dm = self.parent
         ui = dm.parent
-        group_name = item.text()
-        self.dlg = EditGroup(self, group_name)
-        self.dlg.show()
-        if self.dlg.exec_():
-            new_name = self.dlg.name.text()
-            if new_name and new_name != group_name:
-                if new_name in dm.all_groups:
-                    dm.feedback('Group "{}" already exists.'
-                                'Please choose a different name.'
-                                .format(new_name))
-                else:
-                    dm.all_groups[new_name] = dm.all_groups[group_name]
-                    del dm.all_groups[group_name]
-                    for name in dm.group_rename:
-                        if group_name == dm.group_rename[name][-1]:
-                            dm.group_rename[name].append(new_name)
-                            break
-                    i = self.imported_groups.row(item)
-                    self.imported_groups.takeItem(i)
-                    self.imported_groups.insertItem(i, new_name)
-                    for cf in ui.all_figures():
-                        dm.fig_groups[cf.title].remove(group_name)
-                        dm.fig_groups[cf.title].append(new_name)
-                    cf_title = self.figure_selector.currentText()
-                    self.figure_groups.clear()
-                    self.figure_groups.addItems(dm.fig_groups[cf_title])
-                    i = dm.configure_tab.select_group.findText(group_name)
-                    dm.configure_tab.select_group.blockSignals(True)
-                    dm.configure_tab.select_group.removeItem(i)
-                    dm.configure_tab.select_group.blockSignals(False)
-                    dm.configure_tab.select_group.insertItem(i, new_name)
-                    dm.modified = True
+        new = item.text()
+        old = list(dm.all_groups.keys())[self.imported_groups.row(item)]
+        if new == old: return
+        if not new:
+            dm.feedback('Group name cannot be blank.')
+            item.setText(old)
+        elif new in dm.all_groups:
+            dm.feedback('Group "{}" already exists.'
+                        'Please choose a different name.'
+                        .format(new))
+            item.setText(old)
         else:
-            if self.dlg.delete:
+            dm.all_groups[new] = dm.all_groups[old]
+            del dm.all_groups[old]
+            for name in dm.group_rename:
+                if old == dm.group_rename[name][-1]:
+                    dm.group_rename[name].append(new)
+                    break
+            for cf in ui.all_figures():
+                if old in dm.fig_groups[cf.title]:
+                    i = dm.fig_groups[cf.title].index(old)
+                    dm.fig_groups[cf.title][i] = new
+            cf_title = self.figure_selector.currentText()
+            self.figure_groups.clear()
+            self.figure_groups.addItems(dm.fig_groups[cf_title])
+            i = dm.configure_tab.select_group.findText(old)
+            dm.configure_tab.select_group.setItemText(i, new)
+            dm.modified = True
+
+    def delete_imported_group(self, event):
+        dm = self.parent
+        ui = dm.parent
+        if event.key() == Qt.Key_Delete:
+            item = self.imported_groups.currentItem()
+            group_name = item.text()
+            result = ui.popup('Delete group "{}"?'.format(group_name),
+                              mode='confirm')
+            if result == QMessageBox.Ok:
                 del dm.all_groups[group_name]
                 for name in dm.group_rename:
                     if group_name == dm.group_rename[name][-1]:
@@ -540,11 +579,31 @@ class GroupsTab(QWidget):
                         break
                 self.imported_groups.takeItem(self.imported_groups.row(item))
                 for cf in ui.all_figures():
-                    dm.fig_groups[cf.title].remove(group_name)
+                    try:
+                        dm.fig_groups[cf.title].remove(group_name)
+                    except ValueError:
+                        pass
                 cf_title = self.figure_selector.currentText()
                 self.figure_groups.clear()
                 self.figure_groups.addItems(dm.fig_groups[cf_title])
                 w = dm.configure_tab.select_group
                 w.removeItem(w.findText(group_name))
+                dm.feedback('Deleted group "{}".'.format(group_name))
                 dm.modified = True
 
+    def delete_figure_group(self, event):
+        dm = self.parent
+        ui = dm.parent
+        if event.key() == Qt.Key_Delete:
+            cf_title = self.figure_selector.currentText()
+            item = self.figure_groups.selectedItems()[0]
+            group_name = item.text()
+            result = ui.popup('Remove group "{}"?'.format(group_name),
+                              mode='confirm')
+            if result == QMessageBox.Ok:
+                self.figure_groups.takeItem(self.figure_groups.row(item))
+                dm.fig_groups[cf_title].remove(item.text())
+                del dm.group_rename[item.text()]
+                dm.modified = True
+                dm.feedback('Removed group "{}" from figure "{}".'
+                            .format(group_name, cf_title))
