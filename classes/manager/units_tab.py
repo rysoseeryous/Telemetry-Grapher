@@ -53,6 +53,11 @@ class UnitsTab(QWidget):
         hbox.addWidget(self.clarified_table)
 
         form = QFormLayout()
+        self.save_units_check = QCheckBox('Overwrite unit database on '
+                                          'application close')
+        self.save_units_check.setChecked(ui.overwrite_units)
+        self.save_units_check.stateChanged.connect(self.toggle_overwrite_units)
+        form.addRow(self.save_units_check)
         self.auto_parse_check = QCheckBox('Automatically parse '
                                           'units from headers')
         self.auto_parse_check.setChecked(ui.auto_parse)
@@ -75,6 +80,11 @@ class UnitsTab(QWidget):
         form.addRow('Default Unit', self.default_unit_combo)
         hbox.addLayout(form)
         self.setLayout(hbox)
+
+    def toggle_overwrite_units(self, checked):
+        dm = self.parent
+        ui = dm.parent
+        ui.overwrite_units = checked
 
     def toggle_auto_parse(self, checked):
         dm = self.parent

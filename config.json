@@ -134,15 +134,121 @@
     "mx": false,
     "MY": false,
     "my": false,
+    "M_T": 24,
+    "m_T": 1440,
     "scatter": true,
     "dot_size": 0.5,
     "density": 100,
+    "x_margin": 0.05,
     "title_size": 30,
     "label_size": 12,
     "tick_size": 10,
     "tick_rot": 45
   },
-  "csv_dir": "./tests",
+  "M_steps": [
+    24,
+    12,
+    8,
+    6,
+    4,
+    3,
+    2,
+    1
+  ],
+  "m_steps": [
+    [
+      1440,
+      720,
+      480,
+      360,
+      240,
+      180,
+      120,
+      60
+    ],
+    [
+      720,
+      360,
+      240,
+      180,
+      120,
+      60,
+      30,
+      15
+    ],
+    [
+      480,
+      240,
+      120,
+      60,
+      30,
+      20,
+      15,
+      10
+    ],
+    [
+      360,
+      180,
+      120,
+      60,
+      30,
+      20,
+      15,
+      10
+    ],
+    [
+      240,
+      120,
+      60,
+      30,
+      20,
+      15,
+      10,
+      5
+    ],
+    [
+      180,
+      60,
+      30,
+      20,
+      15,
+      12,
+      10,
+      5
+    ],
+    [
+      120,
+      60,
+      30,
+      20,
+      15,
+      12,
+      10,
+      5
+    ],
+    [
+      60,
+      30,
+      20,
+      15,
+      12,
+      10,
+      5,
+      1
+    ]
+  ],
+  "markers": [
+    "o",
+    "+",
+    "x",
+    "D",
+    "s",
+    "^",
+    "v",
+    "<",
+    ">"
+  ],
+  "csv_dir": "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/tests",
   "locations": {
     "Outside Right": "center left",
     "Outside Top": "lower center",
@@ -154,5 +260,20 @@
     "Lower Left": "lower left",
     "Lower Center": "lower center",
     "Lower Right": "lower right"
+  },
+  "color_dict": {
+    "Position": "C0",
+    "Velocity": "C1",
+    "Acceleration": "C2",
+    "Angle": "C3",
+    "Temperature": "C4",
+    "Pressure": "C5",
+    "Energy": "C6",
+    "Voltage": "C7",
+    "Current": "C8",
+    "Resistance": "C9",
+    "Force": "C0",
+    "Torque": "C1",
+    "Power": "C2"
   }
 }

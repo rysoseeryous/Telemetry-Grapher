@@ -23,9 +23,9 @@ __license__ = "GNU General Public License"
 
 class ContentsDict(dict):
     """Hierarchical dictionary.
-    {group1: headers1, group2: headers2...}
+    {group1: aliases1, group2: aliases2...}
     group -> string
-    headers -> list of strings"""
+    aliases -> list of strings"""
 
     def __init__(self, *args):
         dict.__init__(self, args)

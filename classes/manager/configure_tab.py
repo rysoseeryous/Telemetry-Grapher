@@ -259,7 +259,7 @@ class ConfigureTab(QWidget):
 
         try:
             if ext=='.csv':
-                with open(dlg_out[0], 'w') as f:
+                with open(dlg_out[0], 'w', newline='') as f:
                     df.to_csv(f, encoding='utf-8-sig')
             elif ext=='.zip':
                 csvname = filename + '.csv'
@@ -276,7 +276,7 @@ class ConfigureTab(QWidget):
                         return
                 reset_dir = os.getcwd()
                 os.chdir(ui.df_dir)
-                with open(csvname, 'w') as f:
+                with open(csvname, 'w', newline='') as f:
                     df.to_csv(f, encoding='utf-8-sig')
                     with zipfile.ZipFile(local, 'w') as zf:
                         zf.write(csvname, compress_type=zipfile.ZIP_DEFLATED)

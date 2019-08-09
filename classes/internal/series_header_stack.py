@@ -144,14 +144,11 @@ class SeriesHeaderStack(QWidget):
                         'Please choose a different alias.'
                         .format(alias))
             accept = False
-        if not alias:
-            s.alias = alias
-            remove_key_by_value(group.alias_dict, s.header)
-            accept = False
         if accept:
             s.alias = alias
             remove_key_by_value(group.alias_dict, s.header)
-            group.alias_dict[alias] = s.header
+            if alias:
+                group.alias_dict[alias] = s.header
             dm.modified = True
         else:
             ct.header_table.blockSignals(True)

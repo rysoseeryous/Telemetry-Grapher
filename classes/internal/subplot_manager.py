@@ -21,23 +21,23 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-from copy import copy
+import datetime as dt
+from copy import copy, deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
 from .contents_dict import ContentsDict
+from .axes_patch_functions import patch_ax, patch_ygrid_proxy
 
 class SubplotManager():
     """Wrapper around subplot object (host).
     Keeps track of contents and settings of each subplot."""
 
-    def __init__(self, parent, host, contents=None, index=None):
+    def __init__(self, parent, host, index):
         self.parent = parent
-        self.patch_ax(host)
+        cf = self.parent
+        patch_ax(self, host)
         self.axes = [host]
-        if contents is None:
-            self.contents = ContentsDict()
-        else:
-            self.contents = contents
+
         self.index = index
         self.color_coord = False
         self.legend_on = False
@@ -45,72 +45,22 @@ class SubplotManager():
         self.location = 'Outside Right'
         self.ncols = 1
         self.legend_units = True
-
         self.lines = []
         self.labels = []
 
-    def patch_ax(self, ax):
-        ax.parent = self
-        ax.contents = ContentsDict()
-        ax.color = 'k'
-        ax.set_adjustable('datalim')
-        ax.patch.set_visible(False)
-
-        ax.log = False
-        ax.auto_limits = True
-        ax.custom_limits = []
-
-        def set_id(unit_type=None, unit=None, self=ax):
-            self.unit_type = unit_type
-            self.unit = unit
-            self._id = (unit_type, unit)
-        ax.set_id = set_id
-        ax.set_id()
-
-        def label(self=ax):
-            # in the future, use labels instead of (type, unit) _id
-            if self.unit_type:
-                if self.unit:
-                    ylabel = '{} [{}]'.format(self.unit_type, self.unit)
-                else:
-                    ylabel = self.unit_type
-            else:
-                if self.unit:
-                    ylabel = '[{}]'.format(self.unit)
-                else:
-                    ylabel = ''
-            return ylabel
-        ax.label = label
-
-        def set_par(offset=0.0, self=ax):
-            """see https://matplotlib.org/gallery/
-            ticks_and_spines/multiple_yaxis_with_spines.html"""
-            self.yaxis.tick_right()
-            self.yaxis.set_label_position('right')
-            for spine in self.spines.values():
-                spine.set_visible(False)
-            self.spines['right'].set_visible(True)
-            self.spines['right'].set_position(('axes', offset))
-        ax.set_par = set_par
-
-        def set_host(self=ax):
-            """see https://matplotlib.org/gallery/
-            ticks_and_spines/multiple_yaxis_with_spines.html"""
-            self.yaxis.tick_left()
-            self.yaxis.set_label_position('left')
-            for spine in self.spines.values():
-                spine.set_visible(True)
-            self.spines['right'].set_position(('axes', 1.0))
-        ax.set_host = set_host
-
-        def get_data_extents(self=ax):
-            ymin = min([min(line.get_ydata()) for line in self.lines])
-            ymax = max([max(line.get_ydata()) for line in self.lines])
-            return ymin, ymax
-        ax.get_data_extents = get_data_extents
+        self.ygrid_proxy = cf.fig.add_subplot(111)
+        self.ygrid_proxy.set_zorder(-1)
+        patch_ygrid_proxy(self, self.ygrid_proxy)
 
     def host(self):
         return self.axes[0]
+
+    @property
+    def contents(self):
+        contents = ContentsDict()
+        for ax in self.axes:
+            contents.add(deepcopy(ax.contents))
+        return contents
 
     def get_axes(self, unit_type, unit):
         for ax in self.axes:
@@ -123,71 +73,62 @@ class SubplotManager():
         return None
 
     def add(self, contents, cf=None):
-        """Adds contents to sp.contents and distributes them into axes."""
-        sp = self
-        ui = self.parent
+        """Adds contents to self.contents and distributes them into axes."""
         if cf is None:
-            cf = ui.get_current_figure()
-        sp.contents.add(contents)
+            cf = self.parent
+        ui = cf.parent
         for group_name in contents:
             group = ui.all_groups[group_name]
-#            group = cf.groups[group_name]
             for alias in contents[group_name]:
                 header = group.get_header(alias)
                 s = group.series(header)
                 ax = self.get_axes(s.unit_type, s.unit)
                 if ax is None:
-                    par = cf.fig.add_subplot(cf.gs[sp.index])
-                    sp.patch_ax(par)
+                    par = cf.fig.add_subplot(111)
+                    patch_ax(self, par)
                     par.set_id(s.unit_type, s.unit)
-                    sp.axes.append(par)
+                    self.axes.append(par)
                     ax = par
                 ax.contents.add({group_name: [alias]})
 
     def remove(self, contents, cf=None):
-        """Removes contents from sp.contents and from their axes."""
-        sp = self
-        ui = self.parent
+        """Removes contents from self.contents and from their axes."""
         if cf is None:
-            cf = ui.get_current_figure()
-        sp.contents.remove(contents)
+            cf = self.parent
+        ui = cf.parent
         for group_name in contents:
             group = ui.all_groups[group_name]
-#            group = cf.groups[group_name]
             for alias in contents[group_name]:
                 header = group.get_header(alias)
                 s = group.series(header)
                 ax = self.get_axes(s.unit_type, s.unit)
                 ax.contents.remove({group_name: [alias]})
-        for ax in [ax for ax in sp.axes if not ax.contents]:
+        for ax in [ax for ax in self.axes if not ax.contents]:
             ax.remove()
-            sp.axes.remove(ax)
-        if not sp.axes:
+            self.axes.remove(ax)
+        if not self.axes:
             ax = cf.fig.add_subplot(111)
-            sp.patch_ax(ax)
+            patch_ax(self, ax)
             ax.set_id()
-            sp.axes = [ax]
-            if sp in cf.current_sps:
+            self.axes = [ax]
+            if self in cf.current_sps:
                 plt.setp(ax.spines.values(),
                          linewidth=ui.highlight[True])
 
     def plot(self, skeleton=False):
         """Plots all data in each axis according to current style settings."""
-        sp = self
-        ui = self.parent
-        cf = ui.get_current_figure()
-        fs = ui.figure_settings
+        cf = self.parent
+        ui = cf.parent
 
         color_index = 0
         style_dict = {}
-        sp.lines = []
-        sp.labels = []
-        for ax in sp.axes:
+        self.lines = []
+        self.labels = []
+        for ax in self.axes:
             ax.clear()
             ax.patch.set_visible(False)
             for group_name in ax.contents:
                 group = ui.all_groups[group_name]
-#                group = cf.groups[group_name]
                 df = group.data
                 subdf = df[(df.index >= cf.start) & (df.index <= cf.end)]
                 for alias in ax.contents[group_name]:
@@ -200,13 +141,16 @@ class SubplotManager():
                     data = data.iloc[thin]
                     data = data.map(lambda x: x*s.scale)
 
-                    if sp.color_coord:
+                    if self.color_coord:
                         if s.unit_type not in style_dict:
                             style_dict[s.unit_type] = 0
                         counter = style_dict[s.unit_type]
-                        style = fs.markers[counter%len(fs.markers)]
+                        style = ui.markers[counter%len(ui.markers)]
                         style_dict[s.unit_type] += 1
-                        color = fs.color_dict[s.unit_type]
+                        if s.unit_type:
+                            color = ui.color_dict[s.unit_type]
+                        else:
+                            color = ui.current_rcs['axes.labelcolor']
                         labelcolor = color
                     else:
                         style = 'o'
@@ -219,18 +163,20 @@ class SubplotManager():
                                         linestyle='None')
                     else:
                         line, = ax.plot(data, color=color)
-                    sp.lines.append(line)
+                    self.lines.append(line)
                     if s.alias:
-                        sp.labels.append((s.alias, s.unit))
+                        self.labels.append((s.alias, s.unit))
                     else:
-                        sp.labels.append((header, s.unit))
+                        self.labels.append((header, s.unit))
             if ax.contents:
                 ax.set_ylabel(ax.label(),
                               fontsize=cf.label_size,
                               color=labelcolor)
                 ax.tick_params(axis='y', labelcolor=labelcolor)
                 ax.relim()
-                ax.autoscale(axis='x')
+                seconds = (cf.end - cf.start).total_seconds()*cf.x_margin
+                offset = dt.timedelta(seconds=seconds)
+                ax.set_xlim([cf.start-offset, cf.end+offset])
                 if ax.auto_limits:
                     ax.autoscale(axis='y')
                 else:
@@ -240,43 +186,44 @@ class SubplotManager():
                 else:
                     ax.set_yscale('linear')
 
-        sp.arrange_axes()
+        self.arrange_axes()
         cf.format_axes()
         cf.update_toolbars()
 
     def arrange_axes(self):
-        sp = self
-        ui = self.parent
-        cf = ui.get_current_figure()
-        sp.host().set_host()
+        cf = self.parent
+        self.host().set_host()
+        self.host().set_zorder(0)
         offset = cf.axis_offset
-        for i, ax in enumerate(sp.axes[1:]):
+        for i, ax in enumerate(self.axes[1:]):
             ax.set_par(offset=1+offset*(i))
+            ax.set_zorder(i+1)
 
     def show_legend(self):
-        sp = self
-        ui = self.parent
-        cf = ui.get_current_figure()
-        if sp.legend is not None:
-            sp.legend.remove()
-        if sp.legend_on and sp.contents:
-            if sp.location == 'Outside Right':
+        cf = self.parent
+        ui = cf.parent
+        if self.legend is not None:
+            self.legend.remove()
+        if self.legend_on and self.contents:
+            if self.location == 'Outside Right':
                 offset = cf.axis_offset
-                npars = len(sp.axes[1:])
+                npars = len(self.axes[1:])
                 bbox = (1+offset*npars, 0.5)
-            elif sp.location == 'Outside Top':
+            elif self.location == 'Outside Top':
                 bbox = (0.5, 1)
             else:
                 bbox = (0, 0, 1, 1)
-            if sp.legend_units:
-                labels = ['{} [{}]'.format(*x) for x in sp.labels]
+            if self.legend_units:
+                labels = ['{} [{}]'.format(*x) for x in self.labels]
             else:
-                labels = [x[0] for x in sp.labels]
-
-            sp.legend = sp.host().legend(sp.lines, labels,
-                   loc=ui.locations[sp.location],
+                labels = [x[0] for x in self.labels]
+            self.legend = self.axes[-1].legend(self.lines, labels,
+                   loc=ui.locations[self.location],
                    bbox_to_anchor=bbox,
-                   ncol=sp.ncols,
+                   ncol=self.ncols,
                    framealpha=1.0)
-            for handle in sp.legend.legendHandles:
+            self.legend.set_zorder(len(self.labels)+1)
+            for handle in self.legend.legendHandles:
                 handle._legmarker.set_markersize(4)
+        else:
+            self.legend = None

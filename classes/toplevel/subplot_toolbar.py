@@ -80,7 +80,7 @@ class SubplotToolbar(QToolBar):
         weights.insert(idx+1, 1)
         nplots = cf.nplots() + 1
         ax = cf.fig.add_subplot(111)
-        cf.subplots.insert(idx+1, SubplotManager(ui, ax, index=idx+1))
+        cf.subplots.insert(idx+1, SubplotManager(cf, ax, idx+1))
         fs.weights_edit.setText(str(weights))
         cf.update_gridspec(nplots, weights)
         cf.format_axes()
@@ -120,7 +120,7 @@ class SubplotToolbar(QToolBar):
         cf = ui.get_current_figure()
         sd = ui.series_display
         for sp in cf.current_sps:
-            cf.available_data.add(deepcopy(sp.contents))
+            cf.available_data.add((sp.contents))
             sp.remove(deepcopy(sp.contents))
         sd.populate_tree('available', cf.available_data)
         cf.select_subplot(None, force_select=copy(cf.current_sps))

@@ -204,8 +204,8 @@ class DataManager(QDialog):
 
         for cf in ui.all_figures():
             # Get new group: alias information from self.fig_groups
-            dm_contents = ui.groups_to_contents(self.fig_groups[cf.title])
             cf.groups = self.fig_groups[cf.title]
+            dm_contents = ui.groups_to_contents(cf.groups)
             for sp in cf.subplots:
                 new_contents = ContentsDict()
                 for sp_name in copy(tuple(sp.contents.keys())):
@@ -213,7 +213,7 @@ class DataManager(QDialog):
                     try:
                         dm_name = self.group_rename[sp_name][-1]
                     except KeyError:
-                        del sp.contents[sp_name]
+#                        del sp.contents[sp_name]
                         for ax in sp.axes:
                             if sp_name in ax.contents: del ax.contents[sp_name]
                     else:
@@ -232,7 +232,7 @@ class DataManager(QDialog):
                         if not dm_contents[dm_name]: del dm_contents[dm_name]
                         if not new_contents[dm_name]: del new_contents[dm_name]
                 if new_contents:
-                    sp.contents.clear()
+#                    sp.contents.clear()
                     for ax in sp.axes:
                         ax.contents.clear()
                     sp.add(new_contents, cf)
@@ -240,7 +240,7 @@ class DataManager(QDialog):
                         ax.remove()
                         sp.axes.remove(ax)
                 else:
-                    sp.remove(deepcopy(sp.contents), cf)
+                    sp.remove(sp.contents, cf)
             # Dump everything else into cf.available_data
             cf.available_data = dm_contents
             cf.update_gridspec()
@@ -255,6 +255,7 @@ class DataManager(QDialog):
         if len(cf.current_sps) == 1:
             sp = cf.current_sps[0]
             sd.populate_tree('plotted', sp.contents)
+        fs.update_unit_table()
         self.feedback('Saved data to main window.')
         self.modified = False
 

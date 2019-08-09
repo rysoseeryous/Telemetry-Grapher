@@ -23,11 +23,12 @@ __license__ = "GNU General Public License"
 
 import re
 
-from PyQt5.QtWidgets import (QDockWidget, QGridLayout, QPushButton, QLineEdit,
+from PyQt5.QtWidgets import (QDockWidget, QGridLayout, QLineEdit,
                              QWidget, QTreeWidget, QTreeWidgetItem)
 from PyQt5.QtCore import QObject
 
 from ..internal.contents_dict import ContentsDict
+from ..internal.edit_series_dialog import EditSeriesDialog
 
 class SeriesDisplay(QDockWidget):
     """Displays hierarchical string references to imported data groups/aliases.
@@ -37,44 +38,74 @@ class SeriesDisplay(QDockWidget):
     def __init__(self, parent, title):
         super().__init__(title)
         self.parent = parent
-        ui = self.parent
         grid = QGridLayout()
         w = QWidget()
         ncols = 1
         self.available = QTreeWidget()
         self.available.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.available.setSortingEnabled(True)
-        self.available.setHeaderLabels(["Unplotted Series"])
+        self.available.setHeaderLabels(["Available Series"])
         self.available.setColumnCount(ncols)
+        self.available.setDragEnabled(True)
+        self.available.setAcceptDrops(True)
+        self.available.dragEnterEvent =  self.available_drag_enter
+        self.available.dropEvent = self.available_drop_event
+        self.available.itemDoubleClicked.connect(self.series_double_clicked)
+
         self.plotted = QTreeWidget()
         self.plotted.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.plotted.setSortingEnabled(True)
         self.plotted.setHeaderLabels(["Subplot Contents"])
-        self.available.setColumnCount(ncols)
-        self.add = QPushButton('Add')
-        self.add.clicked.connect(self.transfer)
-        self.remove = QPushButton('Remove')
-        self.remove.clicked.connect(self.transfer)
+        self.plotted.setColumnCount(ncols)
+        self.plotted.setDragEnabled(True)
+        self.plotted.setAcceptDrops(True)
+        self.plotted.dragEnterEvent = self.plotted_drag_enter
+        self.plotted.dropEvent = self.plotted_drop_event
+        self.plotted.itemDoubleClicked.connect(self.series_double_clicked)
+
         self.search_available = QLineEdit()
         self.search_available.setPlaceholderText('Search')
         self.search_available.textChanged.connect(self.search)
+
         self.search_plotted = QLineEdit()
         self.search_plotted.setPlaceholderText('Search')
         self.search_plotted.textChanged.connect(self.search)
 
         grid.addWidget(self.search_available, 0, 0)
         grid.addWidget(self.search_plotted, 0, 1)
-        grid.addWidget(self.add, 1, 0)
-        grid.addWidget(self.remove, 1, 1)
-        grid.addWidget(self.available, 2, 0)
-        grid.addWidget(self.plotted, 2, 1)
+        grid.addWidget(self.available, 1, 0)
+        grid.addWidget(self.plotted, 1, 1)
         w.setLayout(grid)
         self.setWidget(w)
 
-#        cf = ui.get_current_figure()
-#        self.populate_tree('available', cf.available_data)
         self.available.expandAll()
         self.available.resizeColumnToContents(0)
+
+    def available_drag_enter(self, event):
+        if event.source() is self.plotted:
+            event.accept()
+        else:
+            event.ignore()
+
+    def available_drop_event(self, event):
+        self.return_to_available()
+
+    def plotted_drag_enter(self, event):
+        ui = self.parent
+        cf = ui.get_current_figure()
+        if len(cf.current_sps) == 1:
+            event.accept()
+        else:
+            event.ignore()
+
+    def plotted_drop_event(self, event):
+        self.add_to_subplot()
+
+    def series_double_clicked(self, item, column):
+        ui = self.parent
+        if item.parent():
+            dlg = EditSeriesDialog(ui, item)
+            dlg.exec_()
 
     def cleanup(self):
         """Sorts both trees and deletes any empty group references."""
@@ -89,7 +120,7 @@ class SeriesDisplay(QDockWidget):
             for x in to_delete:
                 tree.takeTopLevelItem(x)
 
-    def populate_tree(self, which, contents):
+    def populate_tree(self, which, contents, apply_filter=True):
         """Clears target_tree and repopulates with contents"""
         if which == 'available':
             target_tree = self.available
@@ -108,65 +139,86 @@ class SeriesDisplay(QDockWidget):
                     level0.addChild(level1)
                 level0.setExpanded(True)
             target_tree.resizeColumnToContents(0)
-#            w.textChanged.emit(w.text())
+            if apply_filter:
+                w.textChanged.emit(w.text())
             self.cleanup()
 
-    def transfer(self):
-        """Swaps series or group references between available and plotted."""
+    def tree_items_to_contents(self, selected):
+        # Read contents from selected items
+        contents = ContentsDict()
+        if all(item.parent() is None for item in selected):
+            for item in selected:
+                count = item.childCount()
+                children = [item.child(i) for i in range(count)]
+                for child in children: item.removeChild(child)
+                group = item.text(0)
+                aliases = [child.text(0) for child in children]
+                contents.add({group: aliases})
+        else:
+            for item in selected:
+                if item.parent():
+                # if selected item is level1 (ignore if level0)
+                    parent = item.parent()
+                    i = parent.indexOfChild(item)
+                    child = parent.takeChild(i)
+                    group = parent.text(0)
+                    aliases = [child.text(0)]
+                    contents.add({group: aliases})
+        return contents
+
+    def return_to_available(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        sps = cf.current_sps
-        if not sps:
-            ui.statusBar().showMessage(
-                    'Select a subplot to add or remove series')
-        elif len(sps) > 1:
-            ui.statusBar().showMessage(
-                    'Series can only be added to one subplot')
+        selected = self.plotted.selectedItems()
+        if selected:
+            contents = self.tree_items_to_contents(selected)
+            sp = cf.current_sps[0]
         else:
-            sp = sps[0]
-            caller = QObject.sender(self)
-            if caller == self.add:
-                selected = self.available.selectedItems()
-            elif caller == self.remove:
-                selected = self.plotted.selectedItems()
+            contents = cf.transfer_contents
+            sp = cf.transfer_sp
+        sp.remove(contents)
+        cf.available_data.add(contents)
+        sp.plot()
+        sp.show_legend()
+        cf.select_subplot(None, force_select=[sp])
+        cf.update_gridspec()
+        cf.draw()
+        # Populate both trees and reapply search filter
+        self.populate_tree('available', cf.available_data)
+        self.populate_tree('plotted', sp.contents)
+        cf.transfer_contents = None
+        cf.transfer_sp = None
 
-            if selected:
-                # Read contents from selected items
-                contents = ContentsDict()
-                for item in selected:
-                    if all(item.parent() is None for item in selected):
-                        # if only level0 items in selection
-                        count = item.childCount()
-                        children = [item.child(i) for i in range(count)]
-                        for child in children: item.removeChild(child)
-                        group = item.text(0)
-                        aliases = [child.text(0) for child in children]
-                    else:
-                        if item.parent():
-                            # if selected item is level1 (ignore if level0)
-                            parent = item.parent()
-                            i = parent.indexOfChild(item)
-                            child = parent.takeChild(i)
-                            group = parent.text(0)
-                            aliases = [child.text(0)]
-                    contents.add({group: aliases})
+    def add_to_subplot(self):
+        ui = self.parent
+        cf = ui.get_current_figure()
+        selected = self.available.selectedItems()
+        contents = self.tree_items_to_contents(selected)
+        sp = cf.current_sps[0]
+        sp.add(contents)
+        cf.available_data.remove(contents)
+        sp.plot()
+        sp.show_legend()
+        cf.select_subplot(None, force_select=[sp])
+        cf.update_gridspec()
+        cf.draw()
+        # Populate both trees and reapply search filter
+        self.populate_tree('available', cf.available_data)
+        self.populate_tree('plotted', sp.contents)
 
-                if caller == self.add:
-                    sp.add(contents)
-                    cf.available_data.remove(contents)
-                elif caller == self.remove:
-                    sp.remove(contents)
-                    cf.available_data.add(contents)
-                sp.plot()
-                sp.show_legend()
-                cf.select_subplot(None, force_select=[sp])
-                cf.update_gridspec()
-                cf.draw()
-                # Populate both trees and reapply search filter
-                self.populate_tree('available', cf.available_data)
-                self.populate_tree('plotted', sp.contents)
-            else:
-                ui.statusBar().showMessage('No series selected')
+    def transfer_plotted(self):
+        ui = self.parent
+        cf = ui.get_current_figure()
+        contents = cf.transfer_contents
+        sp = cf.current_sps[0]
+        cf.transfer_sp.remove(contents)
+        sp.add(contents)
+        cf.replot()
+        cf.select_subplot(None, force_select=[sp])
+        cf.update_gridspec()
+        cf.draw()
+        # Populate both trees and reapply search filter
+        self.populate_tree('plotted', sp.contents)
 
     def get_sp_contents(self):
         """Returns contents of selected subplot if exactly one is selected.
@@ -200,7 +252,4 @@ class SeriesDisplay(QDockWidget):
 #                #  for which=function
 #                #  ie lambda x: x.keep
 #                #  or lambda x: user_input.search(x)
-#                for alias in aliases:
-#                    if user_input.search(alias):
-#                        matches.add({group: [alias]})
-            self.populate_tree(which, matches)
+            self.populate_tree(which, matches, apply_filter=False)

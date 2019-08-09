@@ -21,12 +21,13 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+#from dateutil.rrule import DAILY
 import datetime as dt
-import matplotlib.dates as mdates
+from matplotlib.dates import HourLocator, MinuteLocator, DateFormatter
 import matplotlib.pyplot as plt
-from matplotlib.ticker import NullLocator, AutoMinorLocator, LogLocator
+from matplotlib.ticker import NullLocator, AutoMinorLocator
 from matplotlib.gridspec import GridSpec
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
@@ -34,7 +35,7 @@ from PyQt5.QtCore import Qt
 from ..internal.subplot_manager import SubplotManager
 from ..internal.contents_dict import ContentsDict
 
-class AxesFrame(FigCanvas):
+class AxesFrame(FigureCanvasQTAgg):
     """Central widget in Application Base main window."""
     def patch_figure(self, fig):
         """Bypasses issue where add_subplot(key) returns the subplot already
@@ -50,6 +51,10 @@ class AxesFrame(FigCanvas):
         self.fig = plt.figure()
         self.patch_figure(self.fig)
         super().__init__(self.fig)
+        self.transfer_contents = ContentsDict()
+        self.transfer_sp = None
+        self.setAcceptDrops(True)
+
         self.saved = True
         self.never_saved = True
         self.parent = parent
@@ -65,7 +70,9 @@ class AxesFrame(FigCanvas):
                            hspace=self.spacing,
                            height_ratios=[1])
         ax0 = self.fig.add_subplot(self.gs[0])
-        self.subplots = [SubplotManager(parent, ax0, index=0)]
+        sp = SubplotManager(self, ax0, 0)
+        sp.ygrid_proxy.set_position(self.gs[0].get_position(self.fig))
+        self.subplots = [sp]
         self.current_sps = []
         self.groups = []
         self.available_data = ContentsDict()
@@ -78,8 +85,6 @@ class AxesFrame(FigCanvas):
         self.start = dt.datetime.strptime('2000-01-01 00:00:00',
                                               '%Y-%m-%d  %H:%M:%S')
         self.end = dt.datetime.now()
-        self.major_locator = mdates.DayLocator()
-        self.minor_locator = mdates.HourLocator(interval=12)
         self.draw()
 
     def weights(self):
@@ -113,6 +118,7 @@ class AxesFrame(FigCanvas):
             sp.index = i
             for ax in sp.axes:
                 ax.set_position(self.gs[i].get_position(self.fig))
+            sp.ygrid_proxy.set_position(self.gs[i].get_position(self.fig))
         self.saved = False
 
     def replot(self, data=True, legend=True):
@@ -123,37 +129,73 @@ class AxesFrame(FigCanvas):
                 sp.show_legend()
         self.saved = False
 
+#    def create_rrule(self, num_major_ticks, num_minor_ticks):
+#        period = 24*60//num_major_ticks//num_minor_ticks
+#        div = num_minor_ticks*60
+#        byminute = sorted(set([(i*period%div)%60 for i in range(60)]))
+#        byhour = list(range(24))
+#        c = 0
+#        bysetpos = []
+#        for hour in byhour:
+#            for minute in byminute:
+#                if (hour*60 + minute)%period == 0:
+#                    bysetpos.append(c+1)
+#                c += 1
+#        return rrulewrapper(DAILY, bysetpos=bysetpos, byhour=byhour,
+#                            byminute=byminute, bysecond=0)
+
+    def create_mlocator(self, m_T):
+        hours = m_T//60
+        minutes = m_T - 60*hours
+        if hours: return HourLocator(byhour=range(0, 24, hours))
+        if minutes: return MinuteLocator(byminute=range(0, 60, minutes))
+
+    def verify_ticks(self, M_T, m_T):
+        try:
+            if any([sp.contents for sp in self.subplots]):
+                days = (self.end - self.start).days
+                if self.mx:
+                    self.create_mlocator(m_T)
+                    ticks_per_day = 24/M_T + 1440/m_T
+                else:
+                    ticks_per_day = 24/M_T
+                if days*ticks_per_day > 500:
+                    raise ValueError
+        except ValueError:
+            return False
+        return True
+
     def format_axes(self):
         """Manages figure axes ticks, tick labels."""
         linestyles = ['-', '--', ':', '-.']
-
         self.fig._suptitle.set_fontsize(self.title_size)
+        Mlocator = HourLocator(byhour=range(0, 24, self.M_T))
+        mlocator = self.create_mlocator(self.m_T)
 
         for sp in self.subplots:
+            sp.ygrid_proxy.clear()
+            sp.ygrid_proxy.set_ymargin(0)
             for i, ax in enumerate(sp.axes):
+                ls = linestyles[i%len(linestyles)]
                 ax.tick_params(axis='x', which='both',
                                labelbottom=False, bottom=False)
                 ax.yaxis.label.set_size(self.label_size)
                 ax.tick_params(axis='y', labelsize=self.tick_size)
 
-                if self.MY:
-                    ax.yaxis.grid(which='major',
-                                  linestyle=linestyles[i%len(linestyles)])
-                else:
-                    ax.yaxis.grid(which='major', b=False)
+                if self.MY and not self.my:
+                    sp.ygrid_proxy.mock_gridlines(ax, which='major',
+                                                  linestyle=ls)
                 if self.my:
                     if ax.log:
-#                        ax.yaxis.set_minor_locator(LogLocator())
                         ax.minorticks_on()
                     else:
                         ax.yaxis.set_minor_locator(AutoMinorLocator())
                     ax.tick_params(axis='y', which='minor',
                                    labelleft=False, labelright=False)
-                    ax.yaxis.grid(which='both',
-                                  linestyle=linestyles[i%len(linestyles)])
+                    sp.ygrid_proxy.mock_gridlines(ax, which='both',
+                                                  linestyle=ls)
                 else:
                     ax.yaxis.set_minor_locator(NullLocator())
-#                    ax.yaxis.grid(which='minor', b=False)
             if sp.contents:
                 if sp.index == len(self.subplots)-1:
                     sp.host().tick_params(axis='x', which='both',
@@ -163,23 +205,75 @@ class AxesFrame(FigCanvas):
                         tick.set_rotation(self.tick_rot)
                         tick.set_horizontalalignment('right')
                 sp.host().xaxis_date()
-                sp.host().xaxis.set_major_locator(self.major_locator)
+                sp.host().xaxis.set_major_locator(Mlocator)
                 if self.mx:
-                    sp.host().xaxis.set_minor_locator(self.minor_locator)
+                    sp.host().xaxis.set_minor_locator(mlocator)
                 else:
                     sp.host().xaxis.set_minor_locator(NullLocator())
-                    sp.host().xaxis.grid(which='minor', b=False)
                 sp.host().xaxis.set_major_formatter(
-                        mdates.DateFormatter(self.tsf))
+                        DateFormatter(self.tsf))
             sp.host().xaxis.grid(which='major', b=self.MX)
             sp.host().xaxis.grid(which='minor', b=self.mx)
             self.saved = False
 
     def get_subplot(self, event):
         for sp in self.subplots:
-            if event.inaxes in sp.axes:
+            if event.inaxes in sp.axes + [sp.ygrid_proxy]:
                 return sp
         return None
+
+    def get_subplot_drag(self, event):
+        x, y = event.pos().x(), event.pos().y()
+        bbox = self.fig.get_window_extent().transformed(
+                self.fig.dpi_scale_trans.inverted())
+        height = bbox.height*self.fig.dpi
+        for sp in self.subplots:
+            bbox = sp.host().get_window_extent().transformed(
+                    self.fig.dpi_scale_trans.inverted())
+            xmin = bbox.xmin*self.fig.dpi
+            ymin = height-bbox.ymax*self.fig.dpi
+            xmax = bbox.xmax*self.fig.dpi
+            ymax = height-bbox.ymin*self.fig.dpi
+            if xmin <= x <= xmax and ymin <= y <= ymax:
+                return sp
+        return None
+
+    def dragEnterEvent(self, event):
+        ui = self.parent
+        sd = ui.series_display
+        if QApplication.focusWidget() is sd.plotted:
+            selected = sd.plotted.selectedItems()
+            self.transfer_contents = sd.tree_items_to_contents(selected)
+            self.transfer_sp = self.current_sps[0]
+        self.select_subplot(None, force_select=[])
+        self.draw()
+        self.dragMoveEvent(event)
+
+    def dragMoveEvent(self, event):
+        sp = self.get_subplot_drag(event)
+        if sp is not None:
+            self.select_subplot(None, force_select=[sp])
+        else:
+            self.select_subplot(None, force_select=[])
+        self.draw()
+        event.accept()
+
+    def dragLeaveEvent(self, event):
+        self.select_subplot(None, force_select=[])
+        self.draw()
+        event.accept()
+
+    def dropEvent(self, event):
+        ui = self.parent
+        sd = ui.series_display
+        if self.current_sps:
+            if QApplication.focusWidget() is sd.available:
+                sd.add_to_subplot()
+            elif QApplication.focusWidget() is sd.plotted:
+                if self.transfer_sp is not self.current_sps[0]:
+                    sd.transfer_plotted()
+                self.transfer_contents = None
+                self.transfer_sp = None
 
     def select_subplot(self, event, force_select=None):
         """Controls highlighting and contents display.
@@ -280,7 +374,6 @@ class AxesFrame(FigCanvas):
         # Axes Toolbar
         at.selector.setEnabled(b)
         at.selector.clear()
-
         if b:
             if len(self.current_sps) == 1:
                 sp = self.current_sps[0]

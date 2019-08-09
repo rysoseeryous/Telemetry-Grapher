@@ -75,7 +75,6 @@ class AxesToolbar(QToolBar):
         self.addWidget(self.yaxis_max)
 
     def update_current_axes(self, i):
-#        print('update_current_axes')
         # This signal emitted twice when:
         # - Click on an already selected subplot with contents
         # - Add/remove series from subplot
@@ -104,7 +103,6 @@ class AxesToolbar(QToolBar):
         self.manage_limit_indicators(any_auto and b)
 
     def toggle_log_scale(self, checked):
-#        print('toggle_log_scale')
         ui = self.parent
         cf = ui.get_current_figure()
         log_dict = {True: 'log', False: 'linear'}
@@ -115,7 +113,6 @@ class AxesToolbar(QToolBar):
         cf.draw()
 
     def manage_limit_indicators(self, checked):
-#        print('manage_limit_indicators')
         i = self.selector.currentIndex()
         enable = (not checked and i > 0)
         self.yaxis_min.setEnabled(enable)
@@ -125,9 +122,7 @@ class AxesToolbar(QToolBar):
         if i > 0:
             ax = self.current_axes[0]
             data_min, data_max = ax.get_data_extents()
-
             ymin, ymax = ax.get_ylim()
-
             span = data_max - data_min
             margin = ax.margins()[1]
             lower = data_min - span*(1 + margin)
@@ -136,13 +131,6 @@ class AxesToolbar(QToolBar):
             self.yaxis_min.setMaximum(upper)
             self.yaxis_max.setMinimum(lower)
             self.yaxis_max.setMaximum(upper)
-#            print('\n', ax.label())
-#            print('data: ', data_min, data_max)
-#            print('axes: ', ymin, ymax)
-#            print('span: ', span)
-#            print('margin: ', margin)
-#            print('data_padded: ', lower, upper)
-
             self.yaxis_min.setValue(ymin)
             self.yaxis_max.setValue(ymax)
         else:
@@ -156,7 +144,6 @@ class AxesToolbar(QToolBar):
         self.yaxis_max.blockSignals(False)
 
     def toggle_autoscale_limits(self, checked):
-#        print('toggle_autoscale_limits')
         ui = self.parent
         cf = ui.get_current_figure()
         for ax in self.current_axes:
@@ -168,10 +155,10 @@ class AxesToolbar(QToolBar):
                 ax.set_ylim(ax.custom_limits)
 
         self.manage_limit_indicators(checked)
+        cf.format_axes()
         cf.draw()
 
     def update_custom_limits(self):
-#        print('update_custom_limits')
         ui = self.parent
         cf = ui.get_current_figure()
         ax = self.current_axes[0]
@@ -180,4 +167,5 @@ class AxesToolbar(QToolBar):
         if ymin >= ymax: return
         ax.custom_limits = [ymin, ymax]
         ax.set_ylim(ax.custom_limits)
+        cf.format_axes()
         cf.draw()

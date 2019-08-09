@@ -43,7 +43,10 @@ class Group():
             except TypeError:
                 return [self.series_dict[header] for header in which]
             except KeyError:
-                return [s for s in self.series_dict.values() if which(s)]
+                try:
+                    return [s for s in self.series_dict.values() if which(s)]
+                except TypeError:
+                    raise KeyError('"{}" is not a valid series reference')
 
     def get_header(self, alias):
         """Returns original header of alias."""

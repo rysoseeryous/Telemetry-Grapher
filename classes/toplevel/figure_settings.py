@@ -25,14 +25,12 @@ import math
 import functools
 import datetime as dt
 import matplotlib.colors as mcolors
-import matplotlib.dates as mdates
 
 from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
-                             QGridLayout, QFormLayout,
-                             QHBoxLayout, QVBoxLayout,
-                             QGroupBox, QLabel, QCheckBox, QPushButton,
-                             QRadioButton, QSpinBox, QDoubleSpinBox, QLineEdit,
-                             QDateTimeEdit,
+                             QGridLayout, QFormLayout ,QVBoxLayout, QGroupBox,
+                             QSpinBox, QDoubleSpinBox, QLineEdit,
+                             QCheckBox, QLabel, QSlider,
+                             QRadioButton, QPushButton, QDateTimeEdit,
                              QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtCore import Qt, QObject
@@ -47,10 +45,10 @@ class FigureSettings(QDockWidget):
         self.parent = parent
         ui = self.parent
         self.weights_edited = False
-        # when color coordination is on,
-        # use markers in this order to differentiate series
-        self.markers = ['o', '+', 'x', 'D', 's', '^', 'v', '<', '>']
-# add to config.json?
+        msg = 'All minor periods do not have the same length'
+        len0 = len(ui.m_steps[0])
+        assert all([len(m_Ts) == len0 for m_Ts in ui.m_steps]), msg
+
         w = QWidget()
         vbox = QVBoxLayout()
 
@@ -110,6 +108,19 @@ class FigureSettings(QDockWidget):
         self.minor_y = QCheckBox('Minor Y')
         self.minor_y.toggled.connect(self.update_grid)
         grid.addWidget(self.minor_y, 1, 1)
+        self.major_T = QLabel()
+        grid.addWidget(self.major_T, 2, 0, 1, 2)
+        self.major_slider = QSlider(Qt.Horizontal)
+        self.major_slider.setMaximum(len(ui.M_steps)-1)
+        self.major_slider.setPageStep(1)
+        self.major_slider.valueChanged.connect(self.update_grid)
+        grid.addWidget(self.major_slider, 3, 0, 1, 2)
+        self.minor_T = QLabel()
+        grid.addWidget(self.minor_T, 4, 0, 1, 2)
+        self.minor_slider = QSlider(Qt.Horizontal)
+        self.minor_slider.setPageStep(1)
+        self.minor_slider.valueChanged.connect(self.update_grid)
+        grid.addWidget(self.minor_slider, 5, 0, 1, 2)
         grid_group.setLayout(grid)
         vbox.addWidget(grid_group)
 
@@ -135,22 +146,33 @@ class FigureSettings(QDockWidget):
         self.density.setSuffix('%')
         self.density.valueChanged.connect(self.update_plots)
         grid.addWidget(self.density, 2, 1)
-        grid.addWidget(QLabel('Plot Start:'), 3, 0)
+
+
+        grid.addWidget(QLabel('X Margin'), 3, 0)
+        self.x_margin = QDoubleSpinBox()
+        self.x_margin.setRange(0, 0.5)
+        self.x_margin.setSingleStep(0.01)
+        self.x_margin.valueChanged.connect(self.update_plots)
+        grid.addWidget(self.x_margin, 3, 1)
+
+
+        grid.addWidget(QLabel('Plot Start:'), 4, 0)
         self.min_timestamp = QPushButton('Min')
         self.min_timestamp.clicked.connect(self.set_start_min)
-        grid.addWidget(self.min_timestamp, 3, 1)
+        grid.addWidget(self.min_timestamp, 4, 1)
         self.select_start = QDateTimeEdit()
         self.select_start.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
         self.select_start.dateTimeChanged.connect(self.update_start)
-        grid.addWidget(self.select_start, 4, 0, 1, 2)
-        grid.addWidget(QLabel('Plot End:'), 5, 0)
+        grid.addWidget(self.select_start, 5, 0, 1, 2)
+        grid.addWidget(QLabel('Plot End:'), 6, 0)
         self.max_timestamp = QPushButton('Max')
         self.max_timestamp.clicked.connect(self.set_end_max)
-        grid.addWidget(self.max_timestamp, 5, 1)
+        grid.addWidget(self.max_timestamp, 6, 1)
         self.select_end = QDateTimeEdit()#dt.datetime.now())
+
         self.select_end.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
         self.select_end.dateTimeChanged.connect(self.update_end)
-        grid.addWidget(self.select_end, 6, 0, 1, 2)
+        grid.addWidget(self.select_end, 7, 0, 1, 2)
         plot_group.setLayout(grid)
         vbox.addWidget(plot_group)
 
@@ -196,8 +218,6 @@ class FigureSettings(QDockWidget):
 
         self.dlg = QColorDialog()
         self.dlg.setWindowIcon(QIcon('rc/satellite.png'))
-        default_color = ui.current_rcs['axes.labelcolor']
-        self.color_dict = {None:default_color, '':default_color}
         self.update_unit_table()
 
     def update_gs_kwargs(self):
@@ -266,8 +286,44 @@ class FigureSettings(QDockWidget):
         cf.mx = self.minor_x.isChecked()
         cf.MY = self.major_y.isChecked()
         cf.my = self.minor_y.isChecked()
-        cf.format_axes()
-        cf.draw()
+
+        M_i = self.major_slider.value()
+        m_i = self.minor_slider.value()
+        M_T = ui.M_steps[M_i] # in hours
+        m_T = ui.m_steps[M_i][m_i] # in minutes
+        if not cf.verify_ticks(M_T, m_T):
+            M_i = self.major_slider.value()
+            m_i = self.minor_slider.value()
+            if m_i != 0:
+                self.minor_slider.setValue(m_i-1)
+            else:
+                self.major_slider.setValue(M_i-1)
+                self.minor_slider.setMaximum(len(ui.m_steps[M_i])-1)
+            ui.statusBar().showMessage('Tick density too high.')
+        else:
+            self.update_freq_labels(M_T, m_T)
+            cf.M_T = M_T
+            cf.m_T = m_T
+            cf.format_axes()
+            cf.draw()
+
+    def update_freq_labels(self, M_T, m_T):
+        if M_T%24 == 0:
+            self.major_T.setText('Major X Tick: 1 day')
+        elif M_T != 1:
+            self.major_T.setText('Major X Tick: {} hrs'.format(M_T))
+        else:
+            self.major_T.setText('Major X Tick: 1 hr')
+
+        if m_T%1440 == 0:
+            self.minor_T.setText('Minor X Tick: 1 day')
+        elif 60 < m_T:
+            self.minor_T.setText('Major X Tick: {} hrs'
+                                          .format(m_T//60))
+        elif m_T == 60:
+            self.minor_T.setText('Major X Tick: 1 hr')
+        else:
+            self.minor_T.setText('Major X Tick: {} mins'.format(m_T))
 
     def update_plots(self):
         ui = self.parent
@@ -275,6 +331,7 @@ class FigureSettings(QDockWidget):
         cf.scatter = self.scatter.isChecked()
         cf.dot_size = self.dot_size.value()
         cf.density = self.density.value()
+        cf.x_margin = self.x_margin.value()
         cf.replot()
         cf.draw()
 
@@ -303,8 +360,7 @@ class FigureSettings(QDockWidget):
         ui = self.parent
         if cf is None:
             cf = ui.get_current_figure()
-
-        groups = [ui.all_groups[key] for key in cf.groups]
+        groups = [ui.all_groups[group_name] for group_name in cf.groups]
         if groups:
             data_start = min([group.data.index[0] for group in groups])
             data_end = max([group.data.index[-1] for group in groups])
@@ -314,25 +370,22 @@ class FigureSettings(QDockWidget):
             data_start = dt.datetime.strptime('2000-01-01 00:00:00',
                                             '%Y-%m-%d  %H:%M:%S')
             data_end = dt.datetime.now()
-
-        timespan = cf.end - cf.start
-        if timespan >= dt.timedelta(days=4):
-            Mstep = 24
-            mstep = 12
-        elif (timespan >= dt.timedelta(days=2) and
-              timespan < dt.timedelta(days=4)):
-            Mstep = 24
-            mstep = 12
-        else:
-            Mstep = 2
-            mstep = 1
-        cf.major_locator = mdates.HourLocator(byhour=range(0, 24, Mstep))
-        cf.minor_locator = mdates.HourLocator(byhour=range(0, 24, mstep))
         self.select_start.setMinimumDateTime(data_start)
         self.select_start.setMaximumDateTime(cf.end)
         self.select_end.setMaximumDateTime(data_end)
         self.select_end.setMinimumDateTime(cf.start)
-        cf.replot()
+
+        if not cf.verify_ticks(cf.M_T, cf.m_T):
+            M_i = self.major_slider.value()
+            m_i = self.minor_slider.value()
+            if m_i != 0:
+                self.minor_slider.setValue(m_i-1)
+            else:
+                self.major_slider.setValue(M_i-1)
+                self.minor_slider.setMaximum(len(ui.m_steps[M_i])-1)
+            ui.statusBar().showMessage('Tick density too high.')
+        else:
+            cf.replot()
 
     def update_fonts(self):
         ui = self.parent
@@ -387,22 +440,26 @@ class FigureSettings(QDockWidget):
         ui = self.parent
         self.unit_table.setRowCount(len(ui.all_units()))
         for i, unit_type in enumerate(ui.all_units()):
-            if unit_type not in self.color_dict:
-                self.color_dict.update({unit_type:'C'+str(i%10)})
-            color = QColor(mcolors.to_hex(self.color_dict[unit_type]))
+            if unit_type not in ui.color_dict:
+                ui.color_dict.update({unit_type:'C'+str(i%10)})
+            color = QColor(mcolors.to_hex(ui.color_dict[unit_type]))
             self.dlg.setCustomColor(i, color)
             item = QTableWidgetItem(unit_type)
             item.setFlags(Qt.ItemIsSelectable)
             self.unit_table.setItem(i, 0, item)
-            color = mcolors.to_hex(self.color_dict[unit_type])
+            color = mcolors.to_hex(ui.color_dict[unit_type])
             colorButton = QColorButton(self, color, unit_type)
             colorButton.clicked.connect(self.pick_color)
             _widget = QWidget()
-            _layout = QHBoxLayout(_widget)
+            _layout = QVBoxLayout(_widget)
             _layout.addWidget(colorButton)
             _layout.setAlignment(Qt.AlignCenter)
             _layout.setContentsMargins(0,0,0,0)
             self.unit_table.setCellWidget(i, 1, _widget)
+        all_types = [unit_type for unit_type in ui.color_dict.keys()]
+        for unit_type in all_types:
+            if unit_type not in ui.all_units():
+                del ui.color_dict[unit_type]
 
     def pick_color(self):
         """Opens a color picker dialog and assigns it to the unit type."""
@@ -415,13 +472,14 @@ class FigureSettings(QDockWidget):
             color_button.color = self.dlg.currentColor().name()
             color_button.setStyleSheet(
                     "background-color:{};".format(color_button.color))
-            self.color_dict[unit_type] = color_button.color
             ui = self.parent
+            ui.color_dict[unit_type] = color_button.color
             cf = ui.get_current_figure()
             cf.replot()
             cf.draw()
 
     def update_fields(self, cf):
+        ui = self.parent
         widgets = self.findChildren(QWidget)
         for w in widgets: w.blockSignals(True)
         self.upper_pad.setValue(cf.upper_pad)
@@ -435,10 +493,17 @@ class FigureSettings(QDockWidget):
         self.minor_x.setChecked(cf.mx)
         self.major_y.setChecked(cf.MY)
         self.minor_y.setChecked(cf.my)
+        M_i = ui.M_steps.index(cf.M_T)
+        m_i = ui.m_steps[M_i].index(cf.m_T)
+        self.major_slider.setValue(M_i)
+        self.minor_slider.setMaximum(len(ui.m_steps[M_i])-1)
+        self.minor_slider.setValue(m_i)
+        self.update_freq_labels(cf.M_T, cf.m_T)
         self.scatter.setChecked(cf.scatter)
         self.line.setChecked(not cf.scatter)
         self.dot_size.setValue(cf.dot_size)
         self.density.setValue(cf.density)
+        self.x_margin.setValue(cf.x_margin)
         self.title_size.setValue(cf.title_size)
         self.label_size.setValue(cf.label_size)
         self.tick_size.setValue(cf.tick_size)

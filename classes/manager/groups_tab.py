@@ -24,6 +24,7 @@ __license__ = "GNU General Public License"
 import os
 import re
 import math
+import warnings
 import datetime as dt
 import pandas as pd
 import numpy as np
@@ -37,6 +38,7 @@ from PyQt5.QtCore import Qt, QFileInfo
 
 from .import_settings import ImportSettings
 from ..internal.group import Group
+from ..internal.file_sort_filter_proxy_model import FileSortFilterProxyModel
 
 class GroupsTab(QWidget):
     """UI for organizing source files into groups."""
@@ -49,6 +51,8 @@ class GroupsTab(QWidget):
 
         self.path_dict = {}
         self.df_preview = {}
+        self.suffixes = ['bytes', 'KB', 'MB', 'GB']
+        self.date_format = '%d-%b-%y %H:%M'
 
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
@@ -71,14 +75,26 @@ class GroupsTab(QWidget):
 
         grid.addWidget(QLabel('Found Files'), 1, 0)
 
-        self.found_files = QTableView()
-        self.found_files.setSortingEnabled(True)
+        self.files_table = QTableView()
         self.files_model = QStandardItemModel()
-        self.found_files.setModel(self.files_model)
-        ui.make_widget_deselectable(self.found_files)
-        self.found_files.setDragEnabled(True)
-        self.found_files.setSelectionBehavior(QTableView.SelectRows)
-        grid.addWidget(self.found_files, 2, 0)
+        self.files_proxy = FileSortFilterProxyModel(self)
+        self.files_proxy.setSourceModel(self.files_model)
+        self.files_table.setModel(self.files_proxy)
+        labels = ['File Name', 'Size', 'Date Modified']
+        self.files_model.setHorizontalHeaderLabels(labels)
+        v_header = self.files_table.verticalHeader()
+        v_header.setDefaultSectionSize(v_header.minimumSectionSize())
+        v_header.hide()
+        h_header = self.files_table.horizontalHeader()
+        h_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        h_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        h_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.files_table.setSortingEnabled(True)
+        ui.make_widget_deselectable(self.files_table)
+        self.files_table.setDragEnabled(True)
+        self.files_table.setSelectionBehavior(QTableView.SelectRows)
+        self.files_table.doubleClicked.connect(self.add_files_to_group)
+        grid.addWidget(self.files_table, 2, 0)
 
         self.group_name = QLineEdit()
         if self.parent.debug:
@@ -160,30 +176,28 @@ class GroupsTab(QWidget):
             self.search_dir()
 
     def format_file_size(self, file_size):
-        # I think this doesn't quite work properly... #!!!
         if file_size:
-            n = np.clip(int(math.log(file_size, 1000)), 0, 3)
+            n = np.clip(int(math.log(file_size, 1000))-1, 1, 3)
         else:
             n = 0
-        suffix = ['bytes', 'KB', 'MB', 'GB']
-        return str(int(file_size/(1000*n))) + ' ' + suffix[n]
+        size = '{:,}'.format(int(file_size/(1000**n)))
+        return size + ' ' + self.suffixes[n]
 
-    def populate_found_files(self, files):
-        self.files_model.clear()
-        labels = ['File Name', 'Size', 'Modified']
-        self.files_model.setHorizontalHeaderLabels(labels)
-        v_header = self.found_files.verticalHeader()
-        v_header.setDefaultSectionSize(v_header.minimumSectionSize())
-        v_header.hide()
-        h_header = self.found_files.horizontalHeader()
-        h_header.setSectionResizeMode(0, QHeaderView.Stretch)
+    def populate_files_table(self, files):
+        for row in reversed(range(self.files_model.rowCount())):
+            self.files_model.removeRow(row)
+        h_header = self.files_table.horizontalHeader()
         h_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        h_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         for f in files:
             name = QStandardItem(f.fileName())
-            size = QStandardItem(self.format_file_size(f.size()))
+            name.setEditable(False)
+            # ~0.9768 is evidently the ratio b/w actual size and Qt's estimate
+            size = QStandardItem(self.format_file_size(f.size()*0.9768))
+            size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            size.setEditable(False)
             date = f.lastModified().toPyDateTime()
-            modified = QStandardItem(date.strftime('%d-%b-%y %H:%M'))
+            modified = QStandardItem(date.strftime(self.date_format))
+            modified.setEditable(False)
             self.files_model.appendRow([name, size, modified])
 
     def search_dir(self):
@@ -201,7 +215,7 @@ class GroupsTab(QWidget):
         else:
             self.path_dict.update(new_path_dict_entries)
             self.file_search.setText('')
-            self.populate_found_files(self.files)
+            self.populate_files_table(self.files)
 
     def gather_files(self, path):
         """Returns list of csv file names in directory path.
@@ -224,10 +238,10 @@ class GroupsTab(QWidget):
         pattern = re.compile(text, re.IGNORECASE)
         matches = [f for f in self.files
                    if re.search(pattern, os.path.splitext(f.fileName())[0])]
-        self.populate_found_files(matches)
+        self.populate_files_table(matches)
 
     def group_files_drag_event(self, event):
-        if event.source() is self.found_files:
+        if event.source() is self.files_table:
             event.accept()
         else:
             event.ignore()
@@ -238,19 +252,22 @@ class GroupsTab(QWidget):
         else:
             event.ignore()
 
-    def group_files_drop_event(self, event):
+    def add_files_to_group(self, index=None):
         dm = self.parent
         w = self.group_files
-        selected = self.found_files.selectedIndexes()
+        selected = self.files_table.selectedIndexes()
         for row in set([index.row() for index in selected]):
-            file_name = self.found_files.model().item(row, 0).text()
+            file_name = self.files_model.item(row, 0).text()
             if file_name in [w.item(i).text() for i in range(w.count())]:
                 dm.feedback('"{}" already added to group.'.format(file_name))
             else:
                 w.addItem(file_name)
+
+    def group_files_drop_event(self, event):
+        self.add_files_to_group()
         event.ignore()
 
-    def figure_groups_drop_event(self, event):
+    def add_groups_to_figure(self):
         dm = self.parent
         cf_title = self.figure_selector.currentText()
         name = self.imported_groups.currentItem().text()
@@ -262,6 +279,9 @@ class GroupsTab(QWidget):
             dm.fig_groups[cf_title].append(name)
             dm.group_rename.update({name:[name]})
             dm.modified = True
+
+    def figure_groups_drop_event(self, event):
+        self.add_groups_to_figure()
         event.ignore()
 
     def review_import_settings(self, source_files):
@@ -282,25 +302,29 @@ class GroupsTab(QWidget):
                 # Read first column and take its length
                 # so you can read head and tail later
                 # without loading the whole DF into memory
-                shown_rows = 20
-                first_col = pd.read_csv(path, usecols=[0], header=None,
-                                      encoding='latin1')
-                n = len(first_col.index)
+                with warnings.catch_warnings(record=True) as ws:
+                    shown_rows = 20
+                    first_col = pd.read_csv(path, usecols=[0], header=None,
+                                          encoding='latin1')
+                    n = len(first_col.index)
 
-                if n > shown_rows:
-                    upper_df = pd.read_csv(path,
-                                           nrows=shown_rows//2,
-                                           header=None, encoding='latin1')
-                    lower_df = pd.read_csv(path,
-                                           skiprows=range(n-shown_rows//2),
-                                           header=None, encoding='latin1')
-                    ellipses = pd.DataFrame(['...']*len(upper_df.columns),
-                                            index=upper_df.columns,
-                                            columns=['...']).T
-                    shown_df = upper_df.append(ellipses).append(lower_df)
-                else:
-                    shown_df = pd.read_csv(path,
-                                           header=None, encoding='latin1')
+                    if n > shown_rows:
+                        upper_df = pd.read_csv(path,
+                                               nrows=shown_rows//2,
+                                               header=None, encoding='latin1')
+                        lower_df = pd.read_csv(path,
+                                               skiprows=range(n-shown_rows//2),
+                                               header=None, encoding='latin1')
+                        ellipses = pd.DataFrame(['...']*len(upper_df.columns),
+                                                index=upper_df.columns,
+                                                columns=['...']).T
+                        shown_df = upper_df.append(ellipses).append(lower_df)
+                    else:
+                        shown_df = pd.read_csv(path,
+                                               header=None, encoding='latin1')
+                    for w in ws:
+                        if w.category is not pd.errors.DtypeWarning:
+                            warnings.showwarning(w.message, w.category)
                 self.df_preview[path] = shown_df
                 dtf, r, c, skiprows = self.interpret_data(path)
                 ui.path_kwargs[path] = {'format': dtf,
@@ -433,14 +457,19 @@ class GroupsTab(QWidget):
                 dtf = ui.path_kwargs[path]['format']
 
             try:
-                start = dt.datetime.now()
-                data = pd.read_csv(path, **path_kwargs)
+#                start = dt.datetime.now()
+                with warnings.catch_warnings(record=True) as ws:
+#                    warnings.simplefilter('always')
+                    data = pd.read_csv(path, **path_kwargs)
+                    for w in ws:
+                        if w.category is not pd.errors.DtypeWarning:
+                            warnings.showwarning(w.message, w.category)
                 data.index.names = ['Timestamp']
                 data.columns = data.columns.map(str)
                 data.index = pd.to_datetime(data.index,
                                             infer_datetime_format=True,
                                             format=dtf)
-                end = dt.datetime.now()
+#                end = dt.datetime.now()
                 # This error has never been thrown
                 if any(ts == pd.NaT for ts in data.index):
                     raise ValueError('Timestamps could not be parsed'

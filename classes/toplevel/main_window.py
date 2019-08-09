@@ -55,6 +55,7 @@ class UI(QMainWindow):
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
         self.auto_parse = True
+        self.overwrite_units = True
         self.all_groups = {}
         self.bypass = False
 
@@ -133,10 +134,6 @@ class UI(QMainWindow):
                             """)
         self.setCentralWidget(self.tab_base)
 
-        self.set_app_style(self.current_qss,
-                           self.current_rcs,
-                           self.current_icon_path)
-
         self.series_display = SeriesDisplay(self, "Series Display")
         self.figure_settings = FigureSettings(self, "Figure Settings")
         self.figure_settings.setAllowedAreas(Qt.RightDockWidgetArea |
@@ -146,6 +143,10 @@ class UI(QMainWindow):
         self.resizeDocks([self.series_display, self.figure_settings],
                          [420, 165],
                          Qt.Horizontal)
+
+        self.set_app_style(self.current_qss,
+                           self.current_rcs,
+                           self.current_icon_path)
 
         self.file_menu.new()
         cf = self.get_current_figure()
@@ -158,7 +159,7 @@ class UI(QMainWindow):
         self.legend_toolbar.legend_location.setMinimumWidth(100)
         self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
-        self.tools_menu.open_data_manager()
+#        self.tools_menu.open_data_manager()
 
     def get_current_figure(self):
         return self.tab_base.currentWidget()
@@ -283,6 +284,9 @@ class UI(QMainWindow):
                         line.set_color(mpl_rcs['grid.color'])
             cf.replot()
             cf.draw()
+        fs = self.figure_settings
+        fs.select_start.setMinimumWidth(130)
+        fs.select_end.setMinimumWidth(130)
         lt.legend_location.setMinimumWidth(100)
         at.selector.setMinimumWidth(100)
 
@@ -323,13 +327,15 @@ class UI(QMainWindow):
                 self.tab_base.setCurrentIndex(i-1)
 
     def overwrite_config(self):
-        self.config['unit_clarify'] = self.unit_clarify
-        self.config['base_units'] = self.base_units
-        self.config['user_units'] = self.user_units
-        self.config['default_unit_type'] = self.default_unit_type
-        self.config['default_unit'] = self.default_unit
+        if self.overwrite_units:
+            self.config['unit_clarify'] = self.unit_clarify
+            self.config['base_units'] = self.base_units
+            self.config['user_units'] = self.user_units
+            self.config['default_unit_type'] = self.default_unit_type
+            self.config['default_unit'] = self.default_unit
         self.config['mode'] = self.mode
         self.config['csv_dir'] = self.csv_dir
+        self.config['color_dict'] = self.color_dict
         with open('config.json', 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
 
