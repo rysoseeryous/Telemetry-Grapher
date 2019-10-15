@@ -36,6 +36,13 @@ class Series():
         self.scale = 1.0
         self.keep = True
         self.color = None
+        
+    @property
+    def label(self):
+        if self.alias:
+            return self.alias
+        else:
+            return self.header
 
     def get_unit_type(self):
         return self.unit_type

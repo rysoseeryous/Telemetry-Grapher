@@ -126,14 +126,13 @@ class EditSeriesDialog(QDialog):
 
     def apply_changes(self):
         s = self.s
+        if s.alias: del s.group.alias_dict[s.alias]
         s.alias = self.alias
         s.unit_type = self.unit_type
         s.unit = self.unit
         s.scale = self.scale
-        if s.alias:
-            self.item.setText(0, s.alias)
-        else:
-            self.item.setText(0, s.header)
+        self.item.setText(0, s.label)
+        if s.alias: s.group.alias_dict[s.alias] = s.header
 
     def save_exit(self):
         ui = self.parent
@@ -141,35 +140,23 @@ class EditSeriesDialog(QDialog):
         cf = ui.get_current_figure()
         s = self.s
 
-#        known_aliases = [alias for alias in s.group.alias_dict.keys()]
-        for alias in s.group.alias_dict:
-            if s.group.alias_dict[alias] == s.header:
-                del s.group.alias_dict[alias]
-                if self.alias:
-                    s.group.alias_dict[self.alias] = s.header
-                break
-
         if self.item.treeWidget() is sd.available:
-            aliases = cf.available_data[s.group.name]
-            i = aliases.index(s.alias)
+            labels = cf.available_data[s.group.name]
+            i = labels.index(s.label)
             self.apply_changes()
-            aliases[i] = s.alias
+            labels[i] = s.label
         elif self.item.treeWidget() is sd.plotted:
             sp = cf.current_sps[0]
             if s.unit_type != self.unit_type or s.unit != self.unit:
                 sp.remove({s.group.name: [s.alias]})
             else:
-#                sp.contents.remove({s.group.name: [s.alias]})
                 for ax in sp.axes:
                     try:
                         ax.contents.remove({s.group.name: [s.alias]})
                     except ValueError:
                         pass
             self.apply_changes()
-            if s.alias:
-                sp.add({s.group.name: [s.alias]})
-            else:
-                sp.add({s.group.name: [s.header]})
+            sp.add({s.group.name: [s.label]})
         cf.replot()
         cf.update_gridspec()
         cf.draw()

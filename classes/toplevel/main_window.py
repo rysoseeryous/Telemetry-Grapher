@@ -225,13 +225,8 @@ class UI(QMainWindow):
         contents = ContentsDict()
         for group_name in groups:
             group = self.all_groups[group_name]
-            aliases = []
-            for s in group.series(lambda s: s.keep):
-                if s.alias:
-                    aliases.append(s.alias)
-                else:
-                    aliases.append(s.header)
-            contents.update({group_name: aliases})
+            labels = [s.label for s in group.series(lambda s: s.keep)]
+            contents.update({group_name: labels})
         return contents
 
     def make_widget_deselectable(self, widget):

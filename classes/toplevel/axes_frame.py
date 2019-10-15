@@ -212,7 +212,7 @@ class AxesFrame(FigureCanvasQTAgg):
                     sp.host().xaxis.set_minor_locator(NullLocator())
                 sp.host().xaxis.set_major_formatter(
                         DateFormatter(self.tsf))
-            sp.host().xaxis.grid(which='major', b=self.MX)
+            sp.host().xaxis.grid(which='major', b=(self.MX or self.mx))
             sp.host().xaxis.grid(which='minor', b=self.mx)
             self.saved = False
 

@@ -164,10 +164,11 @@ class SubplotManager():
                     else:
                         line, = ax.plot(data, color=color)
                     self.lines.append(line)
-                    if s.alias:
-                        self.labels.append((s.alias, s.unit))
-                    else:
-                        self.labels.append((header, s.unit))
+                    self.labels.append((s.label, s.unit))
+#                    if s.alias:
+#                        self.labels.append((s.alias, s.unit))
+#                    else:
+#                        self.labels.append((header, s.unit))
             if ax.contents:
                 ax.set_ylabel(ax.label(),
                               fontsize=cf.label_size,
