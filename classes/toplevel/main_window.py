@@ -22,6 +22,8 @@ __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
 import os
+import sys
+import logging
 import json
 import datetime as dt
 import matplotlib.pyplot as plt
@@ -41,16 +43,14 @@ from .view_menu import ViewMenu
 from .subplot_toolbar import SubplotToolbar
 from .legend_toolbar import LegendToolbar
 from .axes_toolbar import AxesToolbar
-
 from ..internal.contents_dict import ContentsDict
 from ..internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
     """Main application window."""
 
-    def __init__(self, logger):
+    def __init__(self):
         super().__init__()
-        self.logger = logger
         self.fig_dir = os.getcwd()
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
@@ -59,8 +59,31 @@ class UI(QMainWindow):
         self.all_groups = {}
         self.bypass = False
 
+        # Allows logging of unhandled exceptions
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(filename='telemetry_grapher/errors.log', filemode='w', level=logging.INFO)
+        self.logger.start = dt.datetime.now()
+        self.logger.any = False
+
+        def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
+            """Handler for unhandled exceptions that will write to the logs"""
+            print('Error thrown! Check the log.')
+            if issubclass(exc_type, KeyboardInterrupt):
+                # call the default excepthook saved at __excepthook__
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                return
+            if not self.logger.any:
+                self.logger.info(' Application OPENED at {}'.format(self.logger.start))
+            self.logger.critical(' Unhandled exception at {}'.format(dt.datetime.now()),
+                            exc_info=(exc_type, exc_value, exc_traceback))
+            self.logger.any = True
+        sys.excepthook = handle_unhandled_exception
+        
         stylesheets = []
-        for f in (QFile('rc/light.qss'), QFile('rc/dark.qss')):
+        for f in (
+            QFile('telemetry_grapher/rc/light.qss'),
+            QFile('telemetry_grapher/rc/dark.qss')
+            ):
             if not f.exists():
                 self.logger.error('Unable to load stylesheet,'
                                   '\"{}\" not found'.format(f.fileName()))
@@ -71,7 +94,7 @@ class UI(QMainWindow):
         self.light_qss, self.dark_qss = stylesheets
 
         # Read settings from config file
-        with open('config.json', 'r', encoding='utf-8-sig') as f:
+        with open('telemetry_grapher/config.json', 'r', encoding='utf-8-sig') as f:
             self.config = json.load(f)
         for k,v in self.config.items():
             setattr(self, k, deepcopy(v))
@@ -81,14 +104,14 @@ class UI(QMainWindow):
         if self.mode == 'light':
             self.current_qss = self.light_qss
             self.current_rcs = self.light_rcs
-            self.current_icon_path = 'rc/entypo/light'
+            self.current_icon_path = 'telemetry_grapher/rc/entypo/light'
         elif self.mode == 'dark':
             self.current_qss = self.dark_qss
             self.current_rcs = self.dark_rcs
-            self.current_icon_path = 'rc/entypo/dark'
+            self.current_icon_path = 'telemetry_grapher/rc/entypo/dark'
 
         self.setWindowTitle('Telemetry Plot Configurator')
-        self.setWindowIcon(QIcon('rc/satellite.png'))
+        self.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
         self.statusBar().showMessage('No subplot selected')
 
         self.file_menu = FileMenu('File', self)
@@ -159,7 +182,7 @@ class UI(QMainWindow):
         self.legend_toolbar.legend_location.setMinimumWidth(100)
         self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
-#        self.tools_menu.open_data_manager()
+        # self.tools_menu.open_data_manager()
 
     def get_current_figure(self):
         return self.tab_base.currentWidget()
@@ -195,7 +218,7 @@ class UI(QMainWindow):
               mode='save'):
         """Brings up a message box and returns Ok or Cancel."""
         prompt = QMessageBox()
-        prompt.setWindowIcon(QIcon('rc/satellite.png'))
+        prompt.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
         prompt.setWindowTitle(title)
         prompt.setText(text)
         if mode == 'save':
@@ -240,7 +263,6 @@ class UI(QMainWindow):
         app = QApplication.instance()
         if app is None:
             raise RuntimeError("No Qt Application found.")
-            return
         app.setStyleSheet(qss)
 
         st = self.subplot_toolbar
@@ -331,7 +353,7 @@ class UI(QMainWindow):
         self.config['mode'] = self.mode
         self.config['csv_dir'] = self.csv_dir
         self.config['color_dict'] = self.color_dict
-        with open('config.json', 'w', encoding='utf-8') as f:
+        with open('telemetry_grapher/config.json', 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
 
     def closeEvent(self, event):

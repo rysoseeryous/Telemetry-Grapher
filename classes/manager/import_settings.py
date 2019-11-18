@@ -42,7 +42,7 @@ class ImportSettings(QDialog):
         super().__init__()
         self.parent = parent
         self.setWindowTitle('Review Import Settings')
-        self.setWindowIcon(QIcon('rc/satellite.png'))
+        self.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
         gt = self.parent
         dm = gt.parent
         ui = dm.parent

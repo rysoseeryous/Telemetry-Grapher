@@ -24,7 +24,7 @@ __license__ = "GNU General Public License"
 from PyQt5.QtWidgets import QMenu, QAction
 from PyQt5.QtCore import Qt
 
-from ..manager.data_manager import DataManager
+from telemetry_grapher.classes.manager.data_manager import DataManager
 
 class ToolsMenu(QMenu):
     def __init__(self, title, parent):

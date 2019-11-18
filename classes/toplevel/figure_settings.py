@@ -35,7 +35,7 @@ from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtCore import Qt, QObject
 
-from ..internal.q_color_button import QColorButton
+from telemetry_grapher.classes.internal.q_color_button import QColorButton
 
 class FigureSettings(QDockWidget):
     """Contains options for controlling figure size and appearance."""
@@ -147,14 +147,12 @@ class FigureSettings(QDockWidget):
         self.density.valueChanged.connect(self.update_plots)
         grid.addWidget(self.density, 2, 1)
 
-
         grid.addWidget(QLabel('X Margin'), 3, 0)
         self.x_margin = QDoubleSpinBox()
         self.x_margin.setRange(0, 0.5)
         self.x_margin.setSingleStep(0.01)
         self.x_margin.valueChanged.connect(self.update_plots)
         grid.addWidget(self.x_margin, 3, 1)
-
 
         grid.addWidget(QLabel('Plot Start:'), 4, 0)
         self.min_timestamp = QPushButton('Min')
@@ -318,12 +316,12 @@ class FigureSettings(QDockWidget):
         if m_T%1440 == 0:
             self.minor_T.setText('Minor X Tick: 1 day')
         elif 60 < m_T:
-            self.minor_T.setText('Major X Tick: {} hrs'
+            self.minor_T.setText('Minor X Tick: {} hrs'
                                           .format(m_T//60))
         elif m_T == 60:
-            self.minor_T.setText('Major X Tick: 1 hr')
+            self.minor_T.setText('Minor X Tick: 1 hr')
         else:
-            self.minor_T.setText('Major X Tick: {} mins'.format(m_T))
+            self.minor_T.setText('Minor X Tick: {} mins'.format(m_T))
 
     def update_plots(self):
         ui = self.parent

@@ -32,8 +32,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 
-from ..internal.subplot_manager import SubplotManager
-from ..internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.subplot_manager import SubplotManager
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
 
 class AxesFrame(FigureCanvasQTAgg):
     """Central widget in Application Base main window."""

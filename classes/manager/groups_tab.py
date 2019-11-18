@@ -636,3 +636,4 @@ class GroupsTab(QWidget):
                 dm.modified = True
                 dm.feedback('Removed group "{}" from figure "{}".'
                             .format(group_name, cf_title))
+                            

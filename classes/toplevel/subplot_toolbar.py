@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtCore import QObject
 
-from ..internal.subplot_manager import SubplotManager
+from telemetry_grapher.classes.internal.subplot_manager import SubplotManager
 
 class SubplotToolbar(QToolBar):
 
