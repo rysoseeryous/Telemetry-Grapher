@@ -24,8 +24,8 @@ __license__ = "GNU General Public License"
 from PyQt5.QtWidgets import QWidget, QLabel, QCheckBox, QVBoxLayout
 from PyQt5.QtCore import Qt, QObject
 
-from .item_edit import ItemEdit
-from ..internal.dict_combo import DictCombo
+from telemetry_grapher.classes.internal.item_edit import ItemEdit
+from telemetry_grapher.classes.internal.dict_combo import DictCombo
 
 class SeriesHeaderStack(QWidget):
 

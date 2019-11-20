@@ -36,9 +36,9 @@ from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QHeaderView,
 from PyQt5.QtGui import QIcon, QStandardItemModel, QStandardItem
 from PyQt5.QtCore import Qt, QFileInfo
 
-from .import_settings import ImportSettings
-from ..internal.group import Group
-from ..internal.file_sort_filter_proxy_model import FileSortFilterProxyModel
+from telemetry_grapher.classes.manager.import_settings import ImportSettings
+from telemetry_grapher.classes.internal.group import Group
+from telemetry_grapher.classes.internal.file_sort_filter_proxy_model import FileSortFilterProxyModel
 
 class GroupsTab(QWidget):
     """UI for organizing source files into groups."""

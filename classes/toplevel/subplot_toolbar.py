@@ -21,6 +21,8 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import math
+import functools
 import itertools
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
@@ -108,6 +110,10 @@ class SubplotToolbar(QToolBar):
                 nplots -= 1
         sd.populate_tree('available', cf.available_data)
         cf.select_subplot(None, force_select=[])
+        g = functools.reduce(math.gcd, weights)
+        # simplify weights by their greatest common denominator
+        # (eg [2,2,4] -> [1,1,2])
+        weights = [x//g for x in weights]
         fs.weights_edit.setText(str(weights))
         cf.update_gridspec(nplots, weights)
         cf.format_axes()

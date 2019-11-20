@@ -25,8 +25,8 @@ import datetime as dt
 from copy import copy, deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
-from .contents_dict import ContentsDict
-from .axes_patch_functions import patch_ax, patch_ygrid_proxy
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.axes_patch_functions import patch_ax, patch_ygrid_proxy
 
 class SubplotManager():
     """Wrapper around subplot object (host).

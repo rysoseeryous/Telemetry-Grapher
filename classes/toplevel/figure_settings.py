@@ -29,7 +29,7 @@ import matplotlib.colors as mcolors
 from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
                              QGridLayout, QFormLayout ,QVBoxLayout, QGroupBox,
                              QSpinBox, QDoubleSpinBox, QLineEdit,
-                             QCheckBox, QLabel, QSlider,
+                             QCheckBox, QLabel, QSlider, QScrollArea,
                              QRadioButton, QPushButton, QDateTimeEdit,
                              QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QColor
@@ -135,7 +135,7 @@ class FigureSettings(QDockWidget):
         grid.addWidget(self.line, 0, 1)
         grid.addWidget(QLabel('Marker Size'), 1, 0)
         self.dot_size = QDoubleSpinBox()
-        self.dot_size.setRange(0, 5)
+        self.dot_size.setRange(0, 10)
         self.dot_size.setSingleStep(.1)
         self.dot_size.valueChanged.connect(self.update_plots)
         grid.addWidget(self.dot_size, 1, 1)
@@ -178,15 +178,15 @@ class FigureSettings(QDockWidget):
         text_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
         self.title_size = QSpinBox()
-        self.title_size.setRange(0, 60)
+        self.title_size.setRange(0, 100)
         self.title_size.valueChanged.connect(self.update_fonts)
         form.addRow('Title', self.title_size)
         self.label_size = QSpinBox()
-        self.label_size.setRange(0, 30)
+        self.label_size.setRange(0, 60)
         self.label_size.valueChanged.connect(self.update_fonts)
         form.addRow('Axis Labels', self.label_size)
         self.tick_size = QSpinBox()
-        self.tick_size.setRange(0, 20)
+        self.tick_size.setRange(0, 40)
         self.tick_size.valueChanged.connect(self.update_fonts)
         form.addRow('Tick Size', self.tick_size)
         self.tick_rot = QSpinBox()
@@ -210,9 +210,15 @@ class FigureSettings(QDockWidget):
         v_header.setDefaultSectionSize(v_header.minimumSectionSize())
         v_header.setSectionResizeMode(QHeaderView.Fixed)
         self.unit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.unit_table.setMinimumHeight(450)
         vbox.addWidget(self.unit_table)
+
         w.setLayout(vbox)
-        self.setWidget(w)
+        scroll = QScrollArea()
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(w)
+        self.setWidget(scroll)
 
         self.dlg = QColorDialog()
         self.dlg.setWindowIcon(QIcon('rc/satellite.png'))
@@ -398,22 +404,21 @@ class FigureSettings(QDockWidget):
     def edit_timestamp_format(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        tsf_dlg = QInputDialog()
         codes = (
                 ('Code', 'Description', 'Values'),
                 ('', '', ''),
-                ('%d', 'Day of month', '[01-31]'),
-#                ('%-d', 'Day of month', '[1-31]'),
-                ('%b', 'Short month', '[Jan-Dec]'),
-                ('%B', 'Long month', '[January-December]'),
+                ('%d', 'Day of month\t', '[01-31]'),
+            #    ('%-d', 'Day of month\t', '[1-31]'),
+                ('%b', 'Short month\t', '[Jan-Dec]'),
+                ('%B', 'Long month\t', '[January-December]'),
                 ('%m', 'Month zero-pad', '[01-12]'),
-#                ('%-m', 'Month\t', '[1-12]'),
-                ('%y', 'Short year', '[00-99]'),
+            #    ('%-m', 'Month\t', '[1-12]'),
+                ('%y', 'Short year\t', '[00-99]'),
                 ('%Y', 'Year with century', '[2000-2099]'),
                 ('%H', '24-Hour zero-pad', '[00-23]'),
-#                ('%-H', '24-Hour\t', '[0-23]'),
+            #    ('%-H', '24-Hour\t', '[0-23]'),
                 ('%I', '12-Hour zero-pad', '[01-12]'),
-#                ('%-I', '12-Hour\t', '[1-12]'),
+            #    ('%-I', '12-Hour\t', '[1-12]'),
                 ('%M', 'Minute zero-pad', '[00-59]'),
                 ('%S', 'Second zero-pad', '[00-59]'),
                 )
@@ -421,9 +426,14 @@ class FigureSettings(QDockWidget):
         for code in codes:
             reference += '{}\t{}\t{}\n'.format(*code)
         reference += '\nSee strftime.org for more details'
-        text, ok = tsf_dlg.getText(self, 'Edit Timestamp Format',
-                                   reference, text=cf.tsf)
+        
+        tsf_dlg = QInputDialog(self)
+        tsf_dlg.setWindowTitle('Edit Timestamp Format')
+        tsf_dlg.setLabelText(reference)
+        tsf_dlg.setTextValue(cf.tsf)
+        ok = tsf_dlg.exec()
         if ok:
+            text = tsf_dlg.textValue()
             try:
                 dt.datetime.now().strftime(text)
             except ValueError:

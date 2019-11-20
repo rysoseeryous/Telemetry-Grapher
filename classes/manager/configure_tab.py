@@ -33,8 +33,8 @@ from PyQt5.QtWidgets import (QWidget, QFileDialog,
                              QTableWidget)
 from PyQt5.QtCore import Qt, QSortFilterProxyModel
 
-from ..internal.pandas_model import PandasModel
-from ..internal.series_header_stack import SeriesHeaderStack
+from telemetry_grapher.classes.internal.pandas_model import PandasModel
+from telemetry_grapher.classes.internal.series_header_stack import SeriesHeaderStack
 
 class ConfigureTab(QWidget):
 

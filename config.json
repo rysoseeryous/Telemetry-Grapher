@@ -262,7 +262,7 @@
     "Lower Right": "lower right"
   },
   "color_dict": {
-    "Position": "#3eb47d",
+    "Position": "#1f77b4",
     "Velocity": "C1",
     "Acceleration": "C2",
     "Angle": "C3",

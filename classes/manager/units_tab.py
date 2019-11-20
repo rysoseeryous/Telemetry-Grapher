@@ -23,10 +23,10 @@ __license__ = "GNU General Public License"
 
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QFormLayout, QCheckBox
 
-from ..internal.unit_tree import UnitTree
-from ..internal.unit_model import UnitModel
-from ..internal.dict_combo import DictCombo
-from ..internal.clarified_table import ClarifiedTable
+from telemetry_grapher.classes.internal.unit_tree import UnitTree
+from telemetry_grapher.classes.internal.unit_model import UnitModel
+from telemetry_grapher.classes.internal.dict_combo import DictCombo
+from telemetry_grapher.classes.internal.clarified_table import ClarifiedTable
 
 class UnitsTab(QWidget):
 
@@ -39,7 +39,7 @@ class UnitsTab(QWidget):
         hbox = QHBoxLayout()
         self.base_model = UnitModel(self, 'Base Units')
         self.base_tree = UnitTree(self, self.base_model, dm.base_units,
-                                  L0_edit=False, L0_add=False)
+                                  L0_edit=True, L0_add=False)
         ui.make_widget_deselectable(self.base_tree)
         hbox.addWidget(self.base_tree)
 

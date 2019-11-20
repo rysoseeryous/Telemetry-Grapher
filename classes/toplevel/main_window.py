@@ -34,17 +34,17 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow, QTabWidget,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
-from .series_display import SeriesDisplay
-from .figure_settings import FigureSettings
-from .file_menu import FileMenu
-from .edit_menu import EditMenu
-from .tools_menu import ToolsMenu
-from .view_menu import ViewMenu
-from .subplot_toolbar import SubplotToolbar
-from .legend_toolbar import LegendToolbar
-from .axes_toolbar import AxesToolbar
-from ..internal.contents_dict import ContentsDict
-from ..internal.editable_tab_bar import EditableTabBar
+from telemetry_grapher.classes.toplevel.series_display import SeriesDisplay
+from telemetry_grapher.classes.toplevel.figure_settings import FigureSettings
+from telemetry_grapher.classes.toplevel.file_menu import FileMenu
+from telemetry_grapher.classes.toplevel.edit_menu import EditMenu
+from telemetry_grapher.classes.toplevel.tools_menu import ToolsMenu
+from telemetry_grapher.classes.toplevel.view_menu import ViewMenu
+from telemetry_grapher.classes.toplevel.subplot_toolbar import SubplotToolbar
+from telemetry_grapher.classes.toplevel.legend_toolbar import LegendToolbar
+from telemetry_grapher.classes.toplevel.axes_toolbar import AxesToolbar
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
     """Main application window."""
@@ -164,7 +164,7 @@ class UI(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
         self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
         self.resizeDocks([self.series_display, self.figure_settings],
-                         [420, 165],
+                         [400, 250],
                          Qt.Horizontal)
 
         self.set_app_style(self.current_qss,

@@ -30,10 +30,10 @@ from PyQt5.QtWidgets import (QDialog, QMessageBox, QWidget,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 
-from .groups_tab import GroupsTab
-from .configure_tab import ConfigureTab
-from .units_tab import UnitsTab
-from ..internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.manager.groups_tab import GroupsTab
+from telemetry_grapher.classes.manager.configure_tab import ConfigureTab
+from telemetry_grapher.classes.manager.units_tab import UnitsTab
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
 
 class DataManager(QDialog):
     """Manages the importing of data and configuration of data groups."""

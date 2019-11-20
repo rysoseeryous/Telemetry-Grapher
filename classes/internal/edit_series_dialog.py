@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QMessageBox,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 
-from .dict_combo import DictCombo
+from telemetry_grapher.classes.internal.dict_combo import DictCombo
 
 class EditSeriesDialog(QDialog):
 
@@ -46,7 +46,7 @@ class EditSeriesDialog(QDialog):
         self.unit = s.unit
         self.scale = s.scale
         self.setWindowTitle('Edit Series')
-        self.setWindowIcon(QIcon('rc/satellite.png'))
+        self.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
 
         form = QFormLayout()
         form.addRow('Group:', QLabel(s.group.name))

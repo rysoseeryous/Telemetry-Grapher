@@ -26,7 +26,7 @@ from math import log10
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
 
 def patch_ax(self, ax):
     ax.parent = self
