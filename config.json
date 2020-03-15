@@ -248,7 +248,7 @@
     "<",
     ">"
   ],
-  "csv_dir": "C:/Users/seery/Documents/GitHub/Telemetry-Grapher/tests",
+  "csv_dir": "tests",
   "locations": {
     "Outside Right": "center left",
     "Outside Top": "lower center",
@@ -262,7 +262,7 @@
     "Lower Right": "lower right"
   },
   "color_dict": {
-    "Position": "C0",
+    "Position": "#1f77b4",
     "Velocity": "C1",
     "Acceleration": "C2",
     "Angle": "C3",

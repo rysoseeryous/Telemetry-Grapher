@@ -61,8 +61,8 @@ class ViewMenu(QMenu):
             ui.current_rcs = ui.light_rcs
             ui.current_icon_path = 'rc/entypo/light'
         default_color = ui.current_rcs['axes.labelcolor']
-        ui.figure_settings.color_dict[None] = default_color
-        ui.figure_settings.color_dict[''] = default_color
+        ui.color_dict[None] = default_color
+        ui.color_dict[''] = default_color
         ui.set_app_style(ui.current_qss,
                          ui.current_rcs,
                          ui.current_icon_path)

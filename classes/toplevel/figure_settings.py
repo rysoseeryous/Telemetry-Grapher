@@ -29,13 +29,13 @@ import matplotlib.colors as mcolors
 from PyQt5.QtWidgets import (QDockWidget, QWidget, QColorDialog, QInputDialog,
                              QGridLayout, QFormLayout ,QVBoxLayout, QGroupBox,
                              QSpinBox, QDoubleSpinBox, QLineEdit,
-                             QCheckBox, QLabel, QSlider,
+                             QCheckBox, QLabel, QSlider, QScrollArea,
                              QRadioButton, QPushButton, QDateTimeEdit,
                              QHeaderView, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtCore import Qt, QObject
 
-from ..internal.q_color_button import QColorButton
+from telemetry_grapher.classes.internal.q_color_button import QColorButton
 
 class FigureSettings(QDockWidget):
     """Contains options for controlling figure size and appearance."""
@@ -52,7 +52,7 @@ class FigureSettings(QDockWidget):
         w = QWidget()
         vbox = QVBoxLayout()
 
-        figure_group= QGroupBox('Figure Dimensions')
+        figure_group = QGroupBox('Figure Dimensions')
         figure_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
         self.upper_pad = QDoubleSpinBox()
@@ -135,7 +135,7 @@ class FigureSettings(QDockWidget):
         grid.addWidget(self.line, 0, 1)
         grid.addWidget(QLabel('Marker Size'), 1, 0)
         self.dot_size = QDoubleSpinBox()
-        self.dot_size.setRange(0, 5)
+        self.dot_size.setRange(0, 10)
         self.dot_size.setSingleStep(.1)
         self.dot_size.valueChanged.connect(self.update_plots)
         grid.addWidget(self.dot_size, 1, 1)
@@ -147,14 +147,12 @@ class FigureSettings(QDockWidget):
         self.density.valueChanged.connect(self.update_plots)
         grid.addWidget(self.density, 2, 1)
 
-
         grid.addWidget(QLabel('X Margin'), 3, 0)
         self.x_margin = QDoubleSpinBox()
         self.x_margin.setRange(0, 0.5)
         self.x_margin.setSingleStep(0.01)
         self.x_margin.valueChanged.connect(self.update_plots)
         grid.addWidget(self.x_margin, 3, 1)
-
 
         grid.addWidget(QLabel('Plot Start:'), 4, 0)
         self.min_timestamp = QPushButton('Min')
@@ -168,7 +166,7 @@ class FigureSettings(QDockWidget):
         self.max_timestamp = QPushButton('Max')
         self.max_timestamp.clicked.connect(self.set_end_max)
         grid.addWidget(self.max_timestamp, 6, 1)
-        self.select_end = QDateTimeEdit()#dt.datetime.now())
+        self.select_end = QDateTimeEdit()
 
         self.select_end.setDisplayFormat('yyyy-MM-dd hh:mm:ss')
         self.select_end.dateTimeChanged.connect(self.update_end)
@@ -180,15 +178,15 @@ class FigureSettings(QDockWidget):
         text_group.setAlignment(Qt.AlignHCenter)
         form = QFormLayout()
         self.title_size = QSpinBox()
-        self.title_size.setRange(0, 60)
+        self.title_size.setRange(0, 100)
         self.title_size.valueChanged.connect(self.update_fonts)
         form.addRow('Title', self.title_size)
         self.label_size = QSpinBox()
-        self.label_size.setRange(0, 30)
+        self.label_size.setRange(0, 60)
         self.label_size.valueChanged.connect(self.update_fonts)
         form.addRow('Axis Labels', self.label_size)
         self.tick_size = QSpinBox()
-        self.tick_size.setRange(0, 20)
+        self.tick_size.setRange(0, 40)
         self.tick_size.valueChanged.connect(self.update_fonts)
         form.addRow('Tick Size', self.tick_size)
         self.tick_rot = QSpinBox()
@@ -212,9 +210,15 @@ class FigureSettings(QDockWidget):
         v_header.setDefaultSectionSize(v_header.minimumSectionSize())
         v_header.setSectionResizeMode(QHeaderView.Fixed)
         self.unit_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.unit_table.setMinimumHeight(450)
         vbox.addWidget(self.unit_table)
+
         w.setLayout(vbox)
-        self.setWidget(w)
+        scroll = QScrollArea()
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(w)
+        self.setWidget(scroll)
 
         self.dlg = QColorDialog()
         self.dlg.setWindowIcon(QIcon('rc/satellite.png'))
@@ -289,11 +293,14 @@ class FigureSettings(QDockWidget):
 
         M_i = self.major_slider.value()
         m_i = self.minor_slider.value()
-        M_T = ui.M_steps[M_i] # in hours
-        m_T = ui.m_steps[M_i][m_i] # in minutes
+        M_T = ui.M_steps[M_i]  # in hours
+        m_T = ui.m_steps[M_i][m_i]  # in minutes
         if not cf.verify_ticks(M_T, m_T):
             M_i = self.major_slider.value()
             m_i = self.minor_slider.value()
+            #while not cf.verify_ticks(M_T, m_T):
+            
+            
             if m_i != 0:
                 self.minor_slider.setValue(m_i-1)
             else:
@@ -318,12 +325,11 @@ class FigureSettings(QDockWidget):
         if m_T%1440 == 0:
             self.minor_T.setText('Minor X Tick: 1 day')
         elif 60 < m_T:
-            self.minor_T.setText('Major X Tick: {} hrs'
-                                          .format(m_T//60))
+            self.minor_T.setText('Major X Tick: {} hrs'.format(m_T//60))
         elif m_T == 60:
-            self.minor_T.setText('Major X Tick: 1 hr')
+            self.minor_T.setText('Minor X Tick: 1 hr')
         else:
-            self.minor_T.setText('Major X Tick: {} mins'.format(m_T))
+            self.minor_T.setText('Minor X Tick: {} mins'.format(m_T))
 
     def update_plots(self):
         ui = self.parent
@@ -368,7 +374,7 @@ class FigureSettings(QDockWidget):
             cf.end = min([data_end, cf.end])
         else:
             data_start = dt.datetime.strptime('2000-01-01 00:00:00',
-                                            '%Y-%m-%d  %H:%M:%S')
+                                              '%Y-%m-%d  %H:%M:%S')
             data_end = dt.datetime.now()
         self.select_start.setMinimumDateTime(data_start)
         self.select_start.setMaximumDateTime(cf.end)
@@ -400,22 +406,21 @@ class FigureSettings(QDockWidget):
     def edit_timestamp_format(self):
         ui = self.parent
         cf = ui.get_current_figure()
-        tsf_dlg = QInputDialog()
         codes = (
                 ('Code', 'Description', 'Values'),
                 ('', '', ''),
-                ('%d', 'Day of month', '[01-31]'),
-#                ('%-d', 'Day of month', '[1-31]'),
-                ('%b', 'Short month', '[Jan-Dec]'),
-                ('%B', 'Long month', '[January-December]'),
+                ('%d', 'Day of month\t', '[01-31]'),
+            #    ('%-d', 'Day of month\t', '[1-31]'),
+                ('%b', 'Short month\t', '[Jan-Dec]'),
+                ('%B', 'Long month\t', '[January-December]'),
                 ('%m', 'Month zero-pad', '[01-12]'),
-#                ('%-m', 'Month\t', '[1-12]'),
-                ('%y', 'Short year', '[00-99]'),
+            #    ('%-m', 'Month\t', '[1-12]'),
+                ('%y', 'Short year\t', '[00-99]'),
                 ('%Y', 'Year with century', '[2000-2099]'),
                 ('%H', '24-Hour zero-pad', '[00-23]'),
-#                ('%-H', '24-Hour\t', '[0-23]'),
+            #    ('%-H', '24-Hour\t', '[0-23]'),
                 ('%I', '12-Hour zero-pad', '[01-12]'),
-#                ('%-I', '12-Hour\t', '[1-12]'),
+            #    ('%-I', '12-Hour\t', '[1-12]'),
                 ('%M', 'Minute zero-pad', '[00-59]'),
                 ('%S', 'Second zero-pad', '[00-59]'),
                 )
@@ -423,9 +428,14 @@ class FigureSettings(QDockWidget):
         for code in codes:
             reference += '{}\t{}\t{}\n'.format(*code)
         reference += '\nSee strftime.org for more details'
-        text, ok = tsf_dlg.getText(self, 'Edit Timestamp Format',
-                                   reference, text=cf.tsf)
+        
+        tsf_dlg = QInputDialog(self)
+        tsf_dlg.setWindowTitle('Edit Timestamp Format')
+        tsf_dlg.setLabelText(reference)
+        tsf_dlg.setTextValue(cf.tsf)
+        ok = tsf_dlg.exec()
         if ok:
+            text = tsf_dlg.textValue()
             try:
                 dt.datetime.now().strftime(text)
             except ValueError:
@@ -441,7 +451,7 @@ class FigureSettings(QDockWidget):
         self.unit_table.setRowCount(len(ui.all_units()))
         for i, unit_type in enumerate(ui.all_units()):
             if unit_type not in ui.color_dict:
-                ui.color_dict.update({unit_type:'C'+str(i%10)})
+                ui.color_dict.update({unit_type: 'C'+str(i%10)})
             color = QColor(mcolors.to_hex(ui.color_dict[unit_type]))
             self.dlg.setCustomColor(i, color)
             item = QTableWidgetItem(unit_type)
@@ -454,7 +464,7 @@ class FigureSettings(QDockWidget):
             _layout = QVBoxLayout(_widget)
             _layout.addWidget(colorButton)
             _layout.setAlignment(Qt.AlignCenter)
-            _layout.setContentsMargins(0,0,0,0)
+            _layout.setContentsMargins(0, 0, 0, 0)
             self.unit_table.setCellWidget(i, 1, _widget)
         all_types = [unit_type for unit_type in ui.color_dict.keys()]
         for unit_type in all_types:

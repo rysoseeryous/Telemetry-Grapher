@@ -32,8 +32,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 
-from ..internal.subplot_manager import SubplotManager
-from ..internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.subplot_manager import SubplotManager
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
 
 class AxesFrame(FigureCanvasQTAgg):
     """Central widget in Application Base main window."""
@@ -147,10 +147,15 @@ class AxesFrame(FigureCanvasQTAgg):
     def create_mlocator(self, m_T):
         hours = m_T//60
         minutes = m_T - 60*hours
-        if hours: return HourLocator(byhour=range(0, 24, hours))
-        if minutes: return MinuteLocator(byminute=range(0, 60, minutes))
+        if hours:
+            mlocator = HourLocator(byhour=range(0, 24, hours))
+        else:
+            mlocator = MinuteLocator(byminute=range(0, 60, minutes))
+        mlocator.MAXTICKS = 10000
+        return mlocator
 
     def verify_ticks(self, M_T, m_T):
+        # print('verify_ticks')
         try:
             if any([sp.contents for sp in self.subplots]):
                 days = (self.end - self.start).days
@@ -212,7 +217,7 @@ class AxesFrame(FigureCanvasQTAgg):
                     sp.host().xaxis.set_minor_locator(NullLocator())
                 sp.host().xaxis.set_major_formatter(
                         DateFormatter(self.tsf))
-            sp.host().xaxis.grid(which='major', b=self.MX)
+            sp.host().xaxis.grid(which='major', b=(self.MX or self.mx))
             sp.host().xaxis.grid(which='minor', b=self.mx)
             self.saved = False
 

@@ -25,8 +25,7 @@ import os
 
 from PyQt5.QtWidgets import QMenu, QAction, QFileDialog
 
-from .axes_frame import AxesFrame
-#from ..internal.bunch import Bunch
+from telemetry_grapher.classes.toplevel.axes_frame import AxesFrame
 
 class FileMenu(QMenu):
     def __init__(self, title, parent):

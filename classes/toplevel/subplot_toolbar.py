@@ -21,6 +21,8 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import math
+import functools
 import itertools
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
@@ -28,7 +30,7 @@ import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QToolBar, QAction
 from PyQt5.QtCore import QObject
 
-from ..internal.subplot_manager import SubplotManager
+from telemetry_grapher.classes.internal.subplot_manager import SubplotManager
 
 class SubplotToolbar(QToolBar):
 
@@ -94,6 +96,7 @@ class SubplotToolbar(QToolBar):
         sd = ui.series_display
         nplots = cf.nplots()
         weights = cf.weights()
+        print(len(cf.subplots))
         for i in reversed([sp.index for sp in cf.current_sps]):
             # add contents back into available tree
             sp = cf.subplots[i]
@@ -106,8 +109,13 @@ class SubplotToolbar(QToolBar):
                 del cf.subplots[i]
                 del weights[i]
                 nplots -= 1
+            sp.ygrid_proxy.remove()
         sd.populate_tree('available', cf.available_data)
         cf.select_subplot(None, force_select=[])
+        g = functools.reduce(math.gcd, weights)
+        # simplify weights by their greatest common denominator
+        # (eg [2,2,4] -> [1,1,2])
+        weights = [x//g for x in weights]
         fs.weights_edit.setText(str(weights))
         cf.update_gridspec(nplots, weights)
         cf.format_axes()

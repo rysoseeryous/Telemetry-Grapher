@@ -25,8 +25,8 @@ import datetime as dt
 from copy import copy, deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
-from .contents_dict import ContentsDict
-from .axes_patch_functions import patch_ax, patch_ygrid_proxy
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.axes_patch_functions import patch_ax, patch_ygrid_proxy
 
 class SubplotManager():
     """Wrapper around subplot object (host).
@@ -164,10 +164,11 @@ class SubplotManager():
                     else:
                         line, = ax.plot(data, color=color)
                     self.lines.append(line)
-                    if s.alias:
-                        self.labels.append((s.alias, s.unit))
-                    else:
-                        self.labels.append((header, s.unit))
+                    self.labels.append((s.label, s.unit))
+#                    if s.alias:
+#                        self.labels.append((s.alias, s.unit))
+#                    else:
+#                        self.labels.append((header, s.unit))
             if ax.contents:
                 ax.set_ylabel(ax.label(),
                               fontsize=cf.label_size,

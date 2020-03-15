@@ -30,10 +30,10 @@ from PyQt5.QtWidgets import (QDialog, QMessageBox, QWidget,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 
-from .groups_tab import GroupsTab
-from .configure_tab import ConfigureTab
-from .units_tab import UnitsTab
-from ..internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.manager.groups_tab import GroupsTab
+from telemetry_grapher.classes.manager.configure_tab import ConfigureTab
+from telemetry_grapher.classes.manager.units_tab import UnitsTab
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
 
 class DataManager(QDialog):
     """Manages the importing of data and configuration of data groups."""
@@ -213,7 +213,7 @@ class DataManager(QDialog):
                     try:
                         dm_name = self.group_rename[sp_name][-1]
                     except KeyError:
-#                        del sp.contents[sp_name]
+                        # del sp.contents[sp_name]
                         for ax in sp.axes:
                             if sp_name in ax.contents: del ax.contents[sp_name]
                     else:
@@ -232,7 +232,7 @@ class DataManager(QDialog):
                         if not dm_contents[dm_name]: del dm_contents[dm_name]
                         if not new_contents[dm_name]: del new_contents[dm_name]
                 if new_contents:
-#                    sp.contents.clear()
+                    # sp.contents.clear()
                     for ax in sp.axes:
                         ax.contents.clear()
                     sp.add(new_contents, cf)

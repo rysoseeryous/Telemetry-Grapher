@@ -34,7 +34,7 @@ from PyQt5.QtWidgets import (QApplication, QDialog,
 from PyQt5.QtGui import QKeySequence, QIcon, QBrush, QColor
 from PyQt5.QtCore import Qt, QSortFilterProxyModel
 
-from ..internal.pandas_model import PandasModel
+from telemetry_grapher.classes.internal.pandas_model import PandasModel
 
 class ImportSettings(QDialog):
 

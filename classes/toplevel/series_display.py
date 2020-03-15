@@ -27,8 +27,8 @@ from PyQt5.QtWidgets import (QDockWidget, QGridLayout, QLineEdit,
                              QWidget, QTreeWidget, QTreeWidgetItem)
 from PyQt5.QtCore import QObject
 
-from ..internal.contents_dict import ContentsDict
-from ..internal.edit_series_dialog import EditSeriesDialog
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.edit_series_dialog import EditSeriesDialog
 
 class SeriesDisplay(QDockWidget):
     """Displays hierarchical string references to imported data groups/aliases.

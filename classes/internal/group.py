@@ -21,7 +21,7 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
-from .series import Series
+from telemetry_grapher.classes.internal.series import Series
 
 class Group():
 
@@ -46,7 +46,8 @@ class Group():
                 try:
                     return [s for s in self.series_dict.values() if which(s)]
                 except TypeError:
-                    raise KeyError('"{}" is not a valid series reference')
+                    raise KeyError('"{}" is not a valid series reference'
+                                   .format(which))
 
     def get_header(self, alias):
         """Returns original header of alias."""

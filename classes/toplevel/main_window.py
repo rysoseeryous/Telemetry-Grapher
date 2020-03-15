@@ -22,6 +22,8 @@ __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
 import os
+import sys
+import logging
 import json
 import datetime as dt
 import matplotlib.pyplot as plt
@@ -32,25 +34,24 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QMainWindow, QTabWidget,
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QTextStream, QFile
 
-from .series_display import SeriesDisplay
-from .figure_settings import FigureSettings
-from .file_menu import FileMenu
-from .edit_menu import EditMenu
-from .tools_menu import ToolsMenu
-from .view_menu import ViewMenu
-from .subplot_toolbar import SubplotToolbar
-from .legend_toolbar import LegendToolbar
-from .axes_toolbar import AxesToolbar
-
-from ..internal.contents_dict import ContentsDict
-from ..internal.editable_tab_bar import EditableTabBar
+from telemetry_grapher.classes.toplevel.series_display import SeriesDisplay
+from telemetry_grapher.classes.toplevel.figure_settings import FigureSettings
+from telemetry_grapher.classes.toplevel.file_menu import FileMenu
+from telemetry_grapher.classes.toplevel.edit_menu import EditMenu
+from telemetry_grapher.classes.toplevel.tools_menu import ToolsMenu
+from telemetry_grapher.classes.toplevel.view_menu import ViewMenu
+from telemetry_grapher.classes.toplevel.subplot_toolbar import SubplotToolbar
+from telemetry_grapher.classes.toplevel.legend_toolbar import LegendToolbar
+from telemetry_grapher.classes.toplevel.axes_toolbar import AxesToolbar
+from telemetry_grapher.classes.internal.contents_dict import ContentsDict
+from telemetry_grapher.classes.internal.editable_tab_bar import EditableTabBar
 
 class UI(QMainWindow):
     """Main application window."""
 
-    def __init__(self, logger):
+    def __init__(self):
         super().__init__()
-        self.logger = logger
+        os.chdir('telemetry_grapher')
         self.fig_dir = os.getcwd()
         self.df_dir = os.getcwd()
         self.path_kwargs = {}
@@ -59,8 +60,31 @@ class UI(QMainWindow):
         self.all_groups = {}
         self.bypass = False
 
+        # Allows logging of unhandled exceptions
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(filename='errors.log', filemode='w', level=logging.INFO)
+        self.logger.start = dt.datetime.now()
+        self.logger.any = False
+
+        def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
+            """Handler for unhandled exceptions that will write to the logs"""
+            print('Error thrown! Check the log.')
+            if issubclass(exc_type, KeyboardInterrupt):
+                # call the default excepthook saved at __excepthook__
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                return
+            if not self.logger.any:
+                self.logger.info(' Application OPENED at {}'.format(self.logger.start))
+            self.logger.critical(' Unhandled exception at {}'.format(dt.datetime.now()),
+                            exc_info=(exc_type, exc_value, exc_traceback))
+            self.logger.any = True
+        sys.excepthook = handle_unhandled_exception
+        
         stylesheets = []
-        for f in (QFile('rc/light.qss'), QFile('rc/dark.qss')):
+        for f in (
+            QFile('rc/light.qss'),
+            QFile('rc/dark.qss')
+            ):
             if not f.exists():
                 self.logger.error('Unable to load stylesheet,'
                                   '\"{}\" not found'.format(f.fileName()))
@@ -140,9 +164,6 @@ class UI(QMainWindow):
                                              Qt.LeftDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.series_display)
         self.addDockWidget(Qt.RightDockWidgetArea, self.figure_settings)
-        self.resizeDocks([self.series_display, self.figure_settings],
-                         [420, 165],
-                         Qt.Horizontal)
 
         self.set_app_style(self.current_qss,
                            self.current_rcs,
@@ -153,13 +174,15 @@ class UI(QMainWindow):
         self.figure_settings.update_fields(cf)
         cf.saved = True
 
-        self.showMaximized()
-
         #!!! because for some reason it resizes this qcombobox??
         self.legend_toolbar.legend_location.setMinimumWidth(100)
         self.axes_toolbar.selector.setMinimumWidth(100)
         ### Delete later, just for speed
 #        self.tools_menu.open_data_manager()
+        self.show()#Maximized()
+        self.resizeDocks([self.series_display, self.figure_settings],
+                         [420, 165],
+                         Qt.Horizontal)
 
     def get_current_figure(self):
         return self.tab_base.currentWidget()
@@ -225,13 +248,8 @@ class UI(QMainWindow):
         contents = ContentsDict()
         for group_name in groups:
             group = self.all_groups[group_name]
-            aliases = []
-            for s in group.series(lambda s: s.keep):
-                if s.alias:
-                    aliases.append(s.alias)
-                else:
-                    aliases.append(s.header)
-            contents.update({group_name: aliases})
+            labels = [s.label for s in group.series(lambda s: s.keep)]
+            contents.update({group_name: labels})
         return contents
 
     def make_widget_deselectable(self, widget):
@@ -245,7 +263,6 @@ class UI(QMainWindow):
         app = QApplication.instance()
         if app is None:
             raise RuntimeError("No Qt Application found.")
-            return
         app.setStyleSheet(qss)
 
         st = self.subplot_toolbar

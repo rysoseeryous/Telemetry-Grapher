@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem,
                              QPushButton, QHeaderView)
 from PyQt5.QtCore import Qt, QObject
 
-from .dict_combo import DictCombo
+from telemetry_grapher.classes.internal.dict_combo import DictCombo
 
 class ClarifiedTable(QTableWidget):
 
