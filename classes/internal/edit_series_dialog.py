@@ -46,7 +46,7 @@ class EditSeriesDialog(QDialog):
         self.unit = s.unit
         self.scale = s.scale
         self.setWindowTitle('Edit Series')
-        self.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
+        self.setWindowIcon(QIcon('rc/satellite.png'))
 
         form = QFormLayout()
         form.addRow('Group:', QLabel(s.group.name))
