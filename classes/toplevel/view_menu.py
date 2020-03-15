@@ -54,12 +54,12 @@ class ViewMenu(QMenu):
             ui.mode = 'dark'
             ui.current_qss = ui.dark_qss
             ui.current_rcs = ui.dark_rcs
-            ui.current_icon_path = 'rc/entypo/dark'
+            ui.current_icon_path = 'telemetry_grapher/rc/entypo/dark'
         else:
             ui.mode = 'light'
             ui.current_qss = ui.light_qss
             ui.current_rcs = ui.light_rcs
-            ui.current_icon_path = 'rc/entypo/light'
+            ui.current_icon_path = 'telemetry_grapher/rc/entypo/light'
         default_color = ui.current_rcs['axes.labelcolor']
         ui.color_dict[None] = default_color
         ui.color_dict[''] = default_color

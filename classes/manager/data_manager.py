@@ -45,7 +45,7 @@ class DataManager(QDialog):
         self.parent = parent
         ui = self.parent
         self.setWindowTitle('Data Manager')
-        self.setWindowIcon(QIcon('rc/satellite.png'))
+        self.setWindowIcon(QIcon('telemetry_grapher/rc/satellite.png'))
         self.all_groups = deepcopy(ui.all_groups)
         self.group_rename = {name:[name] for name in self.all_groups}
         self.fig_groups = {}

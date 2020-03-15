@@ -181,7 +181,7 @@ class UI(QMainWindow):
 #        self.tools_menu.open_data_manager()
         self.show()#Maximized()
         self.resizeDocks([self.series_display, self.figure_settings],
-                         [420, 165],
+                         [420, 250],
                          Qt.Horizontal)
 
     def get_current_figure(self):

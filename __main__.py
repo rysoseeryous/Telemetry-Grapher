@@ -21,17 +21,14 @@ __author__ = "Ryan Seery"
 __copyright__ = 'Copyright 2019 Max-Planck-Institute for Solar System Research'
 __license__ = "GNU General Public License"
 
+import sys
+
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QCoreApplication
+
+from telemetry_grapher.classes.toplevel.main_window import UI
+
 if __name__ == '__main__':
-    import datetime as dt
-    import logging
-    import sys
-    import os
-
-    from PyQt5.QtWidgets import QApplication
-    from PyQt5.QtCore import QCoreApplication
-    
-    from telemetry_grapher.classes.toplevel.main_window import UI
-
     if 'app' not in locals():
         app = QCoreApplication.instance()
     if app is None:  # otherwise kernel dies
