@@ -457,9 +457,9 @@ class GroupsTab(QWidget):
                 dtf = ui.path_kwargs[path]['format']
 
             try:
-#                start = dt.datetime.now()
+            #    start = dt.datetime.now()
                 with warnings.catch_warnings(record=True) as ws:
-#                    warnings.simplefilter('always')
+                #    warnings.simplefilter('always')
                     data = pd.read_csv(path, **path_kwargs)
                     for w in ws:
                         if w.category is not pd.errors.DtypeWarning:
@@ -469,7 +469,7 @@ class GroupsTab(QWidget):
                 data.index = pd.to_datetime(data.index,
                                             infer_datetime_format=True,
                                             format=dtf)
-#                end = dt.datetime.now()
+            #    end = dt.datetime.now()
                 # This error has never been thrown
                 if any(ts == pd.NaT for ts in data.index):
                     raise ValueError('Timestamps could not be parsed'
@@ -491,7 +491,9 @@ class GroupsTab(QWidget):
         dm.message_log.repaint()
         df = df.applymap(self.floatify)
         dm.feedback('Done', mode='append')
-        df.drop_duplicates(inplace=True)
+        # df.drop_duplicates(inplace=True)  # this drops duplicate values...
+        # ...but what I want is to drop duplicate timestamps (indices):
+        df = df.loc[~df.index.duplicated(keep='last')]
         df.sort_index(inplace=True)
         return df
 
