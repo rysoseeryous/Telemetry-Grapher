@@ -150,7 +150,8 @@ class FileMenu(QMenu):
         dlg.setViewMode(QFileDialog.Detail)
         dlg_out = dlg.getSaveFileName(ui, 'Save Figure',
                                       ui.fig_dir + '/' + cf.title,
-                                      'JPEG Image (*.jpg)')#;;PNG Image (*.png)
+                                      'PNG Image (*.png)')
+        # JPG export in matplotlib is bugged as of Jun 30 2020
         if dlg_out[0]:
             savepath = dlg_out[0]
             # store saving directory
